@@ -1,76 +1,161 @@
-/* Concept: "The Logbook" — a driver's trip ledger on warm paper, navy ink, one vermilion accent. */
+/*
+ * Concept: "Wallet" — GoMile's dashboard reads like a wallet app. Pure black canvas, white type,
+ * filled rounded surfaces, one light-blue accent and green for gains.
+ * Flat surfaces only: no gradients, glass, glows or shadows.
+ */
 @import "tailwindcss";
 
 @theme inline {
-  --color-paper: #f2ecdf;
-  --color-paper-deep: #e8e0cf;
-  --color-ink: #13233d;
-  --color-ink-soft: #4a5670;
-  --color-ink-tertiary: #8a8578;
-  --color-accent: #c8431e;
-  --color-accent-deep: #a23516;
-  --color-line: #d6ccb8;
+  --color-canvas: #000000;
+  --color-canvas-raised: #1c1c1c;
+  --color-surface: #1c1c1c;
+  --color-surface-hover: #262626;
+  --color-ink: #ffffff;
+  --color-ink-soft: #a6a6a6;
+  --color-ink-placeholder: #8a8a8a;
+  --color-ink-tertiary: #6b6b6b;
+  --color-accent: #9ec5ff;
+  --color-accent-deep: #7fb0f5;
+  --color-positive: #2ec26a;
+  --color-line: #232323;
+  --color-line-strong: #3a3a3a;
 
-  --font-display: var(--font-fraunces);
-  --font-sans: var(--font-plex);
+  --font-display: var(--font-schibsted);
+  --font-sans: var(--font-schibsted);
   --font-mono: var(--font-jetbrains);
 }
 
 html {
-  background: var(--color-paper);
+  background: var(--color-canvas);
+  color-scheme: dark;
 }
 @media (prefers-reduced-motion: no-preference) {
   html { scroll-behavior: smooth; }
 }
 
 body {
-  background: var(--color-paper);
+  background: var(--color-canvas);
   color: var(--color-ink);
-  font-family: var(--font-sans), serif;
-  font-size: 17px;
-  line-height: 1.55;
+  font-family: var(--font-sans), sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
   background: var(--color-accent);
-  color: var(--color-paper);
+  color: var(--color-canvas);
 }
 
 :focus-visible {
-  outline: 2px solid currentColor;
+  outline: 2px solid var(--color-accent);
   outline-offset: 3px;
 }
 
-.kicker {
-  font-family: var(--font-mono), monospace;
-  font-size: 12px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--color-ink-soft);
-}
-
-/* Hero load reveal */
+/* Load reveal */
 @keyframes rise {
-  from { opacity: 0; transform: translateY(24px); }
+  from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .rise {
-  animation: rise 0.8s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation: rise 0.6s cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
-.rise-1 { animation-delay: 0.12s; }
-.rise-2 { animation-delay: 0.26s; }
-.rise-3 { animation-delay: 0.4s; }
+.rise-1 { animation-delay: 0.08s; }
+.rise-2 { animation-delay: 0.16s; }
+.rise-3 { animation-delay: 0.24s; }
 @media (prefers-reduced-motion: reduce) {
   .rise { animation: none; }
 }
 
-/* Odometer: each digit sits in its own ruled cell */
-.odometer span {
-  display: inline-block;
-  min-width: 0.72em;
-  text-align: center;
-  border-right: 1px solid var(--color-line);
+/* Pressed state for pills, chips, rows and the FAB */
+.press {
+  transition: transform 100ms ease-out, background-color 150ms, color 150ms;
 }
-.odometer span:last-child { border-right: 0; }
-.odometer .dec { color: var(--color-accent); }
+.press:active { transform: scale(0.97); }
+@media (prefers-reduced-motion: reduce) {
+  .press { transition: none; }
+  .press:active { transform: none; }
+}
+
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Loading placeholder */
+@keyframes pulse-soft {
+  50% { opacity: 0.5; }
+}
+.skeleton { animation: pulse-soft 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
+/* Native number inputs: no spinner, it's a touch target nobody can hit */
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+/* Landing page: scroll reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.7s cubic-bezier(0.2, 0.7, 0.3, 1), transform 0.7s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+
+/* Landing page: the thin line under "Scroll" drifts downward */
+@keyframes cue {
+  0% { transform: scaleY(0); transform-origin: top; }
+  50% { transform: scaleY(1); transform-origin: top; }
+  51% { transform: scaleY(1); transform-origin: bottom; }
+  100% { transform: scaleY(0); transform-origin: bottom; }
+}
+.scroll-cue { animation: cue 2.2s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .scroll-cue { animation: none; }
+}
+
+/* Landing page: black-and-white range slider for the reward calculator */
+.range {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 24px;
+  background: transparent;
+  cursor: pointer;
+}
+.range::-webkit-slider-runnable-track {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.3);
+}
+.range::-moz-range-track {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.3);
+}
+.range::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -8.5px;
+  border-radius: 999px;
+  background: #fff;
+  border: 0;
+}
+.range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #fff;
+  border: 0;
+}

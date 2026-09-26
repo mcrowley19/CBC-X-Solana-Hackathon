@@ -1,4 +1,4 @@
-# Logbook: dashcam rewards on Solana
+# GoMile: dashcam rewards on Solana
 
 Drivers earn **MILE** (an SPL Token-2022 on devnet) for every minute of dashcam footage and every
 road event the annotation pipeline finds. Payouts are real on-chain transfers, and each carries a memo
@@ -38,14 +38,14 @@ solana-test-validator --ledger .solana-ledger --limit-ledger-size 2000000
 npm run setup && npm run dev
 ```
 
-Phantom's network setting doesn't matter here: the dashboard only reads your wallet address, and all payouts are made by the server. Phantom's own token list won't show MILE on a local chain; use the dashboard.
+"Open the app" goes straight to the driver account in `DRIVER_WALLET` (created by `npm run setup`); there's no wallet to connect. Configure the Pi with the same address so its trips land there. `/app?wallet=<address>` still opens any other wallet read-only.
 
 ## How the pieces fit
 
 ```
 Raspberry Pi ──clip folder──▶ annotation/ (YOLO + Qwen) ──POST /api/sessions──▶ reward calc ──▶ SPL transfer + memo
                                                                                         │
-Driver (Phantom) ◀── dashboard reads balance + memo history from chain ◀────────────────┘
+Driver account  ◀── dashboard reads balance + memo history from chain ◀────────────────┘
 ```
 
 | Route | Who calls it | What it does |

@@ -3,7 +3,8 @@
  *   1. Creates (or reuses) a treasury keypair and funds it with an airdrop.
  *   2. Creates the MILE reward token (Token-2022 with on-chain name/symbol so wallets show it).
  *   3. Mints the initial supply into the treasury.
- *   4. Writes everything to .env.local.
+ *   4. Creates (or reuses) the driver account the dashboard opens on and the dashcam pays out to.
+ *   5. Writes everything to .env.local.
  *
  * Safe to re-run: existing values in .env.local are reused.
  *   npm run setup
@@ -73,11 +74,18 @@ async function main() {
   env.TREASURY_SECRET_KEY = bs58.encode(treasury.secretKey);
   env.DEVICE_API_KEY ||= crypto.randomBytes(24).toString("hex");
   env.DEMO_MODE ||= "true";
+  // The driver account. Its secret key is kept so the MILE it earns can be moved later; the app never uses it.
+  if (!env.DRIVER_WALLET) {
+    const driver = Keypair.generate();
+    env.DRIVER_WALLET = driver.publicKey.toBase58();
+    env.DRIVER_SECRET_KEY = bs58.encode(driver.secretKey);
+  }
   writeEnv(env);
   env.NEXT_PUBLIC_SOLANA_RPC_URL = rpcUrl;
   writeEnv(env);
   console.log(`Cluster: ${rpcUrl}`);
   console.log(`Treasury: ${treasury.publicKey.toBase58()}`);
+  console.log(`Driver account: ${env.DRIVER_WALLET} (set this as DRIVER_WALLET on the Pi)`);
 
   let balance = await connection.getBalance(treasury.publicKey);
   if (balance < 0.05 * LAMPORTS_PER_SOL) {
