@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Logbook: dashcam rewards on Solana
 
-## Getting Started
+Drivers earn **MILE** (an SPL Token-2022 on devnet) for every minute of dashcam footage and every
+road event the annotation pipeline finds. Payouts are real on-chain transfers, and each carries a memo
+describing the drive. The chain doubles as the database: reward history and duplicate checks are read
+back from Solana, so no extra storage is needed.
 
-First, run the development server:
+## Setup
 
 ```bash
+npm install
+npm run setup     # creates treasury + MILE mint, writes .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+If the airdrop is rate-limited, send devnet SOL to the printed treasury address at
+https://faucet.solana.com and run `npm run setup` again.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How the pieces fit
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+Raspberry Pi ──upload──▶ annotation (Claude) ──POST /api/sessions──▶ reward calc ──▶ SPL transfer + memo
+                                                                                        │
+Driver (Phantom) ◀── dashboard reads balance + memo history from chain ◀────────────────┘
+```
 
-## Learn More
+| Route | Who calls it | What it does |
+|---|---|---|
+| `POST /api/sessions` | Pi / annotation worker (`Authorization: Bearer $DEVICE_API_KEY`) | Calculates the reward and pays it. Idempotent on `sessionId`. |
+| `GET /api/drivers/:wallet` | Dashboard | Returns balance, totals and per-drive history. |
+| `POST /api/demo/drive` | Dashboard "Simulate a drive" button | Fakes a drive for demos. Only works when `DEMO_MODE=true`. |
 
-To learn more about Next.js, take a look at the following resources:
+The reward rules are in `src/lib/rewards.ts`: a per-minute base rate, per-event bonuses, a confidence
+threshold and a per-session cap.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Reporting a drive from the Pi (Python)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```python
+import os, requests
 
-## Deploy on Vercel
+requests.post(f"{HOST}/api/sessions",
+    headers={"Authorization": f"Bearer {os.environ['DEVICE_API_KEY']}"},
+    json={
+        "sessionId": "pi-01-2026-09-26T10-00",   # unique per drive; resending it won't pay twice
+        "deviceId": "pi-01",
+        "wallet": DRIVER_WALLET,                 # driver's Solana address, configured on the device
+        "durationSeconds": 1800,
+        "events": [{"type": "pedestrian", "t": 42.1, "confidence": 0.93}],
+    }, timeout=60).json()
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Event types: `near_miss`, `collision`, `hazard`, `pedestrian`, `cyclist`, `emergency_vehicle`,
+`red_light`, `stop_sign`, `traffic_light`, `lane_change`. Anything else counts as `other`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deploying
+
+Add `TREASURY_SECRET_KEY`, `REWARD_MINT`, `NEXT_PUBLIC_REWARD_MINT`, `NEXT_PUBLIC_TOKEN_SYMBOL`,
+`DEVICE_API_KEY`, `DEMO_MODE` and optionally `SOLANA_RPC_URL` as environment variables (for example with
+`vercel env add`). Use a private RPC such as Helius for anything beyond a demo, because the public devnet
+endpoint rate-limits.
