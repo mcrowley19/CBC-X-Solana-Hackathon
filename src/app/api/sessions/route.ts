@@ -9,7 +9,7 @@ import { sessionReportSchema } from "@/lib/schemas";
  *
  *   POST /api/sessions
  *   Authorization: Bearer <DEVICE_API_KEY>
- *   { "sessionId": "pi-01-2026-09-26T10-00", "wallet": "<driver pubkey>", "deviceId": "pi-01",
+ *   { "sessionId": "pi-01-20260926T133000Z", "wallet": "<driver pubkey>", "deviceId": "pi-01",
  *     "durationSeconds": 1800, "events": [{ "type": "pedestrian", "t": 42.1, "confidence": 0.9 }] }
  */
 export async function POST(request: Request) {

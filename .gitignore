@@ -41,3 +41,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .solana-ledger/
+
+# annotation outputs and the local env
+/annotation/.venv/
+/annotation/out/
+/annotation/inbox/
+yolo11n.pt
+__pycache__/
+*.pyc

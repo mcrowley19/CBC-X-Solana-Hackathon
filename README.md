@@ -43,7 +43,7 @@ Phantom's network setting doesn't matter here: the dashboard only reads your wal
 ## How the pieces fit
 
 ```
-Raspberry Pi ──upload──▶ annotation (Claude) ──POST /api/sessions──▶ reward calc ──▶ SPL transfer + memo
+Raspberry Pi ──clip folder──▶ annotation/ (YOLO + Qwen) ──POST /api/sessions──▶ reward calc ──▶ SPL transfer + memo
                                                                                         │
 Driver (Phantom) ◀── dashboard reads balance + memo history from chain ◀────────────────┘
 ```
@@ -65,7 +65,7 @@ import os, requests
 requests.post(f"{HOST}/api/sessions",
     headers={"Authorization": f"Bearer {os.environ['DEVICE_API_KEY']}"},
     json={
-        "sessionId": "pi-01-2026-09-26T10-00",   # unique per drive; resending it won't pay twice
+        "sessionId": "pi-01-20260926T133000Z",   # unique per drive; resending it won't pay twice
         "deviceId": "pi-01",
         "wallet": DRIVER_WALLET,                 # driver's Solana address, configured on the device
         "durationSeconds": 1800,

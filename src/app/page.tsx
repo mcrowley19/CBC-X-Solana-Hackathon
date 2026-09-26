@@ -113,7 +113,7 @@ export default function Home() {
   -H "Authorization: Bearer $DEVICE_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "sessionId": "pi-01-2026-09-26T10-00",
+    "sessionId": "pi-01-20260926T133000Z",
     "deviceId": "pi-01",
     "wallet": "<driver wallet address>",
     "durationSeconds": 1800,

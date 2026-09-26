@@ -10,7 +10,7 @@
     "setup": "tsx scripts/setup-token.ts",
     "e2e": "tsx scripts/e2e.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@solana/spl-token": "^0.4.15",
