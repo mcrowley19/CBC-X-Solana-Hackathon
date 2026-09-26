@@ -10,8 +10,11 @@ class FfmpegError(RuntimeError):
     pass
 
 
-def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(cmd, capture_output=True, text=True)
+def run(cmd: list[str], timeout: float = 180) -> subprocess.CompletedProcess[str]:
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise FfmpegError(f"timed out after {timeout:.0f}s") from exc
     if result.returncode != 0:
         tail = (result.stderr or result.stdout or "").strip().splitlines()
         detail = tail[-1] if tail else f"exit {result.returncode}"

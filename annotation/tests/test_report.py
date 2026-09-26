@@ -29,7 +29,28 @@ def test_posted_body_matches_the_server_schema(tmp_path):
     assert body["events"] == [{"type": "pedestrian", "t": 4.25, "confidence": 0.91}]
 
 
+def test_duration_is_truncated_so_it_cannot_cross_a_minute(tmp_path):
+    clip = Clip(
+        folder=tmp_path,
+        video=tmp_path / "clip.avi",
+        started_at="20260926T133000Z",
+        session_id="pi-01-20260926T133000Z",
+        device_id="pi-01",
+        wallet="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        duration_s=59.9996,
+        width=320,
+        height=240,
+        fps=10,
+        clip_hash="abc",
+    )
+    assert session_body(clip, [])["durationSeconds"] == 59.999
+
+
 def test_parser_keeps_only_rare_event_types():
     text = '{"events": [{"type": "lane_change", "t": 2, "confidence": 0.8}, {"type": "pedestrian", "t": 1, "confidence": 0.9}]}'
     parsed = parse_events("sure\n" + text)
+    assert parsed is not None
     assert [event.type for event in parsed] == ["lane_change"]
+    assert parse_events("I see events but this is not JSON") is None
+    assert parse_events('{"events": [{"type": "nope"}]}') is None
+    assert parse_events('{"events": "x"}') is None

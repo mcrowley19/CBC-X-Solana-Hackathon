@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 import cv2
@@ -101,8 +102,11 @@ def render_review(
     drain.start()
     frame_index = 0
     code = -1
+    deadline = time.monotonic() + 1200
     try:
         while True:
+            if time.monotonic() > deadline:
+                raise RuntimeError("timed out while writing the review video")
             ok, frame = capture.read()
             if not ok:
                 break
@@ -120,13 +124,24 @@ def render_review(
             proc.stdin.write(rgb.tobytes())
             frame_index += 1
         proc.stdin.close()
-        code = proc.wait()
-        drain.join()
+        try:
+            code = proc.wait(timeout=1200)
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("timed out while writing the review video") from exc
+        drain.join(timeout=5)
     finally:
         capture.release()
         if proc.poll() is None:
             proc.kill()
-            drain.join(timeout=2)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+        drain.join(timeout=2)
     stderr = b"".join(stderr_parts).decode("utf-8", "replace")
     if code != 0:
         tail = stderr.strip().splitlines()
@@ -224,9 +239,13 @@ def _draw_card(
     red, green, blue, channel = card.split()
     channel = channel.point(lambda px: int(px * alpha))
     card = Image.merge("RGBA", (red, green, blue, channel))
-    _, height = image.size
+    width, height = image.size
+    if width <= 16 or height <= 1:
+        return
     bar_h = max(18, height // 18)
-    image.alpha_composite(card, (16, height - bar_h - card_h - 12))
+    x, y = 16, max(0, height - bar_h - card_h - 12)
+    card = card.crop((0, 0, min(card_w, width - x), min(card_h, height - y)))
+    image.alpha_composite(card, (x, y))
 
 
 def _draw_hud(image: Image.Image, t: float, speed_mps: float | None, font: ImageFont.ImageFont) -> None:

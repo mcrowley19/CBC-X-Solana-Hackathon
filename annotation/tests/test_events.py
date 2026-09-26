@@ -1,4 +1,6 @@
+from logbook_annotate.detect import link_untracked
 from logbook_annotate.events import events_from_tracks, finalize, place_window_events, window_starts
+from logbook_annotate.labels import build_labels
 from logbook_annotate.models import Detection, Event, MotionEvent
 
 
@@ -28,8 +30,63 @@ def test_person_on_a_bicycle_is_one_cyclist():
 
 
 def test_a_gappy_track_does_not_get_paid_for_empty_time():
-    dets = [_box(0, 1, "pedestrian"), _box(20, 1, "pedestrian")]
+    dets = [_box(0, 1, "pedestrian"), _box(5, 1, "pedestrian")]
     assert events_from_tracks(dets, fps=10) == []
+
+
+def test_two_people_on_one_bicycle_pay_once():
+    first = [_box(frame, 1, "pedestrian") for frame in range(10)]
+    second = [Detection(frame, 3, "pedestrian", 0.9, 12, 12, 42, 82) for frame in range(10)]
+    bike = [Detection(frame, 2, "bicycle", 0.8, 8, 30, 50, 90) for frame in range(10)]
+    events = events_from_tracks(first + second + bike, fps=10)
+    assert [event.type for event in events] == ["cyclist"]
+
+
+def test_one_rider_on_two_bicycles_pays_once():
+    person = [_box(frame, 1, "pedestrian") for frame in range(10)]
+    first = [Detection(frame, 2, "bicycle", 0.8, 8, 30, 50, 90) for frame in range(10)]
+    second = [Detection(frame, 4, "bicycle", 0.8, 8, 30, 50, 90) for frame in range(10)]
+    events = events_from_tracks(person + first + second, fps=10)
+    assert [event.type for event in events] == ["cyclist"]
+
+
+def test_light_contact_with_two_bikes_stays_a_pedestrian():
+    person = [_box(frame, 1, "pedestrian") for frame in range(10)]
+    bike_a = [
+        Detection(frame, 2, "bicycle", 0.8, *(8, 30, 50, 90) if frame < 2 else (200, 30, 240, 90))
+        for frame in range(8)
+    ]
+    bike_b = [
+        Detection(frame, 4, "bicycle", 0.8, *(8, 30, 50, 90) if 2 <= frame < 4 else (200, 30, 240, 90))
+        for frame in range(8)
+    ]
+    events = events_from_tracks(person + bike_a + bike_b, fps=10)
+    assert [event.type for event in events].count("cyclist") == 2
+    assert [event.type for event in events].count("pedestrian") == 1
+
+
+def test_a_person_beside_a_bicycle_pays_for_both():
+    person = [_box(frame, 1, "pedestrian") for frame in range(10)]
+    bike = [Detection(frame, 2, "bicycle", 0.8, 200, 30, 240, 90) for frame in range(10)]
+    events = events_from_tracks(person + bike, fps=10)
+    assert sorted(event.type for event in events) == ["cyclist", "pedestrian"]
+
+
+def test_boxes_without_track_ids_still_pay_once():
+    dets = [Detection(frame, -1, "pedestrian", 0.9, 10, 10, 40, 80) for frame in range(8)]
+    events = events_from_tracks(link_untracked(dets), fps=10)
+    assert len(events) == 1
+    assert events[0].type == "pedestrian"
+
+
+def test_labels_drop_frames_outside_the_clip():
+    labels = build_labels(
+        "clip.avi",
+        [Detection(0, 1, "car", 0.9, 0, 0, 1, 1), Detection(99999, 1, "car", 0.9, 0, 0, 1, 1)],
+        fps=10,
+        frame_count=5,
+    )
+    assert [frame["timestamp"] for frame in labels["frames"]] == [0]
 
 
 def test_vlm_repeats_inside_one_window_pay_once():

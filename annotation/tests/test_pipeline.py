@@ -44,6 +44,8 @@ def test_pipeline_writes_review_and_payout_files(clip_dir, tmp_path):
     assert "lane_change" in kinds
     assert "near_miss" in kinds
     clip = json.loads((out / "clip.json").read_text())
+    assert clip["complete"] is True
+    assert clip["events"] == events["events"]
     assert clip["clipHash"]
     assert any(item["kind"] == "hard_accel" for item in clip["motion"])
     labels = json.loads((out / "labels.json").read_text())
@@ -62,7 +64,9 @@ def test_watch_runs_a_finished_folder_once(clip_dir, tmp_path):
     watch_loop(clip_dir.parent, Settings(), runner, once=True)
     assert seen == [clip_dir.name]
     assert (clip_dir / ".annotate-done").exists()
-    assert pending_clips(clip_dir.parent, posting=True) == []
+    ready, failed = pending_clips(clip_dir.parent, posting=True)
+    assert ready == []
+    assert failed == 0
 
 
 def test_a_local_annotation_can_still_be_paid_later(clip_dir, tmp_path):
@@ -73,7 +77,9 @@ def test_a_local_annotation_can_still_be_paid_later(clip_dir, tmp_path):
     watch_loop(clip_dir.parent, Settings(post=False), runner, once=True)
     assert (clip_dir / ".annotate-local").exists()
     assert not (clip_dir / ".annotate-done").exists()
-    assert pending_clips(clip_dir.parent, posting=True) == [clip_dir]
+    ready, failed = pending_clips(clip_dir.parent, posting=True)
+    assert ready == [clip_dir]
+    assert failed == 0
 
 
 def test_refuses_to_overwrite_a_different_clip(tmp_path):
@@ -89,3 +95,112 @@ def test_refuses_to_overwrite_a_different_clip(tmp_path):
     annotate(first, settings, detector=ScriptedDetector(), vlm=StubVlm())
     with pytest.raises(ClipError, match="different clip"):
         annotate(second, settings, detector=ScriptedDetector(), vlm=StubVlm())
+
+
+def test_bad_metadata_fails_the_watch(clip_dir):
+    (clip_dir / "metadata.json").write_text("{")
+    failed = watch_loop(clip_dir.parent, Settings(), lambda folder, settings: folder, once=True)
+    assert failed == 1
+    assert (clip_dir / ".annotate-failed").exists()
+
+
+def test_a_dead_lock_does_not_skip_the_clip(clip_dir, tmp_path):
+    (clip_dir / ".annotate-running").write_text("999999\n")
+    seen = []
+
+    def runner(folder, settings):
+        del settings
+        seen.append(folder.name)
+        return tmp_path / "out"
+
+    assert watch_loop(clip_dir.parent, Settings(), runner, once=True) == 0
+    assert seen == [clip_dir.name]
+
+
+def test_a_failed_render_does_not_mark_the_clip_complete(clip_dir, tmp_path, monkeypatch):
+    def boom(*args, **kwargs):
+        del args, kwargs
+        raise ClipError("render failed")
+
+    monkeypatch.setattr("logbook_annotate.pipeline.render_review", boom)
+    settings = Settings(
+        out_dir=tmp_path / "out",
+        post=False,
+        driver_wallet="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        device_id="pi-01",
+        vlm_backend="stub",
+    )
+    with pytest.raises(ClipError, match="render failed"):
+        annotate(clip_dir, settings, detector=ScriptedDetector(), vlm=StubVlm())
+    record = json.loads((tmp_path / "out" / "pi-01-20260926T133000Z" / "clip.json").read_text())
+    assert record["complete"] is False
+    assert not (tmp_path / "out" / "pi-01-20260926T133000Z" / "review.mp4").exists()
+
+
+def test_a_failed_rerun_drops_the_previous_review(clip_dir, tmp_path, monkeypatch):
+    settings = Settings(
+        out_dir=tmp_path / "out",
+        post=False,
+        driver_wallet="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        device_id="pi-01",
+        vlm_backend="stub",
+    )
+    out = annotate(clip_dir, settings, detector=ScriptedDetector(), vlm=StubVlm())
+    assert (out / "review.mp4").exists()
+
+    def boom(*args, **kwargs):
+        del args, kwargs
+        raise ClipError("render failed")
+
+    monkeypatch.setattr("logbook_annotate.pipeline.render_review", boom)
+    with pytest.raises(ClipError, match="render failed"):
+        annotate(clip_dir, settings, detector=ScriptedDetector(), vlm=StubVlm())
+    assert not (out / "review.mp4").exists()
+
+
+def test_a_clip_record_without_a_hash_blocks_another_annotate(clip_dir, tmp_path):
+    settings = Settings(
+        out_dir=tmp_path / "out",
+        post=False,
+        driver_wallet="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        device_id="pi-01",
+        vlm_backend="stub",
+    )
+    out = annotate(clip_dir, settings, detector=ScriptedDetector(), vlm=StubVlm())
+    (out / "clip.json").write_text("{}\n")
+    with pytest.raises(ClipError, match="different clip"):
+        annotate(clip_dir, settings, detector=ScriptedDetector(), vlm=StubVlm())
+
+
+def test_a_busy_output_is_not_marked_failed(clip_dir, tmp_path):
+    def runner(folder, settings):
+        del folder, settings
+        raise ClipError("pi-01-20260926T133000Z is already being annotated")
+
+    assert watch_loop(clip_dir.parent, Settings(post=False), runner, once=True) == 0
+    assert not (clip_dir / ".annotate-failed").exists()
+    assert not (clip_dir / ".annotate-done").exists()
+
+
+def test_watch_once_exits_nonzero_when_metadata_is_bad(clip_dir):
+    from typer.testing import CliRunner
+
+    from logbook_annotate.cli import app
+
+    (clip_dir / "metadata.json").write_text("{")
+    result = CliRunner().invoke(app, ["watch", str(clip_dir.parent), "--once", "--no-post"])
+    assert result.exit_code == 1
+
+
+def test_unreadable_clip_json_blocks_another_annotate(clip_dir, tmp_path):
+    settings = Settings(
+        out_dir=tmp_path / "out",
+        post=False,
+        driver_wallet="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        device_id="pi-01",
+        vlm_backend="stub",
+    )
+    out = annotate(clip_dir, settings, detector=ScriptedDetector(), vlm=StubVlm())
+    (out / "clip.json").write_text("{")
+    with pytest.raises(ClipError, match="unreadable"):
+        annotate(clip_dir, settings, detector=ScriptedDetector(), vlm=StubVlm())

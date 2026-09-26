@@ -22,17 +22,18 @@ def build_prompt(window_duration_s: float) -> str:
     return PROMPT.format(duration=max(window_duration_s, 0.1))
 
 
-def parse_events(text: str) -> list[Event]:
+def parse_events(text: str) -> list[Event] | None:
+    """Return events, or None when the model did not return an events array."""
     match = re.search(r"\{.*\}", text, flags=re.DOTALL)
     if not match:
-        return []
+        return None
     try:
         payload = json.loads(match.group(0))
     except json.JSONDecodeError:
-        return []
+        return None
     raw = payload.get("events") if isinstance(payload, dict) else None
     if not isinstance(raw, list):
-        return []
+        return None
 
     events: list[Event] = []
     for item in raw:
@@ -50,4 +51,6 @@ def parse_events(text: str) -> list[Event]:
         if confidence < 0 or t < 0:
             continue
         events.append(Event(type=kind, t=t, confidence=confidence, source="vlm"))
+    if raw and not events:
+        return None
     return events

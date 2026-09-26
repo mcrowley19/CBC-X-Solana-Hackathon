@@ -10,7 +10,8 @@ from logbook_annotate.config import Settings
 from logbook_annotate.ffmpeg import probe
 from logbook_annotate.models import Clip, ClipError, SensorSample, TrackPoint
 
-SESSION_ID = re.compile(r"^[\w.:-]{1,64}$")
+SESSION_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
+_B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 
 def sha256_file(path: Path) -> str:
@@ -27,6 +28,10 @@ def load_clip(folder: Path, settings: Settings) -> Clip:
         raise ClipError(f"{folder} is not a clip folder")
 
     meta_path = folder / "metadata.json"
+    if meta_path.is_symlink():
+        raise ClipError("metadata.json is a symlink")
+    if meta_path.is_file() and meta_path.stat().st_nlink > 1:
+        raise ClipError("metadata.json is a hard link")
     if not meta_path.is_file():
         raise ClipError(f"{folder.name} has no metadata.json")
     try:
@@ -86,7 +91,10 @@ def _wallet(meta: dict, settings: Settings) -> str:
     meta_wallet = raw if isinstance(raw, str) else ""
     if meta_wallet and settings.driver_wallet and meta_wallet != settings.driver_wallet:
         raise ClipError("metadata wallet does not match DRIVER_WALLET")
-    return settings.driver_wallet or meta_wallet
+    wallet = settings.driver_wallet or meta_wallet
+    if wallet and not is_pubkey(wallet):
+        raise ClipError("wallet is not a Solana address")
+    return wallet
 
 
 def _contained(folder: Path, name: str) -> Path:
@@ -96,6 +104,8 @@ def _contained(folder: Path, name: str) -> Path:
     path = folder / relative
     if path.is_symlink():
         raise ClipError(f"{name} is a symlink")
+    if path.is_file() and path.stat().st_nlink > 1:
+        raise ClipError(f"{name} is a hard link")
     if not path.resolve().is_relative_to(folder.resolve()):
         raise ClipError(f"{name} escapes the clip folder")
     return path
@@ -107,7 +117,7 @@ def _video_path(folder: Path, meta: dict) -> Path:
         return _contained(folder, name)
     matches = [path for path in [*folder.glob("*.avi"), *folder.glob("*.mp4")] if not path.is_symlink()]
     if len(matches) == 1:
-        return matches[0]
+        return _contained(folder, matches[0].name)
     raise ClipError("metadata.json needs a filename, or the folder needs exactly one video")
 
 
@@ -115,6 +125,18 @@ def _started_at_from_name(name: str) -> str:
     if name.startswith("clip_"):
         return name.removeprefix("clip_")
     return name
+
+
+def is_pubkey(value: str) -> bool:
+    """A Solana address is 32 bytes of base58. The server also requires it on the curve."""
+    if not 32 <= len(value) <= 44 or any(char not in _B58 for char in value):
+        return False
+    number = 0
+    for char in value:
+        number = number * 58 + _B58.index(char)
+    pad = len(value) - len(value.lstrip("1"))
+    body = number.to_bytes((number.bit_length() + 7) // 8, "big") if number else b""
+    return len(b"\x00" * pad + body) == 32
 
 
 def _session_id(device_id: str, started_at: str) -> str:
@@ -165,9 +187,11 @@ def _sensors(folder: Path, meta: dict, started_at: str) -> list[SensorSample]:
         except ValueError as exc:
             raise ClipError(f"sensor timestamp is not a time: {item.get('timestamp')}") from exc
         t = (stamp - start).total_seconds()
+        if t < 0:
+            continue
         samples.append(
             SensorSample(
-                t=max(0.0, t),
+                t=t,
                 ax=float(accel.get("x") or 0),
                 ay=float(accel.get("y") or 0),
                 az=float(accel.get("z") or 0),
@@ -176,30 +200,16 @@ def _sensors(folder: Path, meta: dict, started_at: str) -> list[SensorSample]:
                 gz=float(gyro.get("z") or 0),
             )
         )
+    if raw and not samples:
+        raise ClipError(f"{path.name} has no sensor samples")
     samples.sort(key=lambda sample: sample.t)
-    if not samples:
-        return samples
-    origin = samples[0].t
-    return [
-        SensorSample(
-            t=round(sample.t - origin, 3),
-            ax=sample.ax,
-            ay=sample.ay,
-            az=sample.az,
-            gx=sample.gx,
-            gy=sample.gy,
-            gz=sample.gz,
-        )
-        for sample in samples
-    ]
+    return samples
 
 
 def _track(folder: Path) -> list[TrackPoint]:
-    path = folder / "track.json"
+    path = _contained(folder, "track.json")
     if not path.is_file():
         return []
-    if path.is_symlink():
-        raise ClipError("track.json is a symlink")
     try:
         raw = json.loads(path.read_text())
     except json.JSONDecodeError as exc:

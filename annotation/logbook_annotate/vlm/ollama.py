@@ -49,7 +49,7 @@ class OllamaVlm:
         except ValueError as exc:
             raise RuntimeError(f"Ollama returned a non-JSON body: {response.text[:300]}") from exc
         events = parse_events(content)
-        if not events and '"events"' not in content:
+        if events is None:
             raise RuntimeError("Ollama did not return an events JSON object")
         return events
 
@@ -63,7 +63,7 @@ def _sample_frames(video: Path, count: int) -> list[str]:
         indexes = {min(total - 1, round(i * (total - 1) / max(count - 1, 1))) for i in range(count)}
         encoded: list[str] = []
         frame_index = 0
-        while True:
+        while frame_index < total + 2:
             ok, frame = capture.read()
             if not ok:
                 break

@@ -3,9 +3,18 @@ from __future__ import annotations
 from logbook_annotate.models import Detection
 
 
-def build_labels(video_name: str, detections: list[Detection], fps: float) -> dict:
+def build_labels(
+    video_name: str,
+    detections: list[Detection],
+    fps: float,
+    frame_count: int | None = None,
+) -> dict:
     grouped: dict[int, list[Detection]] = {}
     for detection in detections:
+        if detection.frame < 0:
+            continue
+        if frame_count is not None and detection.frame >= frame_count:
+            continue
         grouped.setdefault(detection.frame, []).append(detection)
     frames = []
     for frame, objects in sorted(grouped.items()):

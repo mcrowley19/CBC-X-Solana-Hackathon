@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -40,7 +39,9 @@ class MlxVlm:
             prompt,
         ]
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("mlx-vlm timed out after 600s") from exc
         except OSError as exc:
             raise RuntimeError(
                 "Could not run mlx-vlm. On the Mac install it with: uv sync --extra mlx"
@@ -52,6 +53,6 @@ class MlxVlm:
                 raise RuntimeError("mlx-vlm is not installed. On the Mac run: uv sync --extra mlx")
             raise RuntimeError(f"mlx-vlm failed: {tail}")
         events = parse_events(result.stdout)
-        if not events and '"events"' not in result.stdout:
-            logging.getLogger("logbook").warning("vision model returned no JSON events for %s", video.name)
+        if events is None:
+            raise RuntimeError(f"vision model did not return an events JSON object for {video.name}")
         return events

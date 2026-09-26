@@ -59,25 +59,44 @@ def events_from_tracks(detections: list[Detection], fps: float) -> list[Event]:
     for detection in detections:
         by_track[detection.track_id].append(detection)
 
-    bicycles = [d for d in detections if d.category == "bicycle"]
-    riders: list[list[Detection]] = []
     bike_tracks: list[list[Detection]] = []
-    events: list[Event] = []
+    others: list[tuple[str, list[Detection]]] = []
     for dets in by_track.values():
         category = _majority(dets)
         if category == "bicycle":
             bike_tracks.append(dets)
-            continue
-        if category == "pedestrian" and _rides_bicycle(dets, bicycles):
+        else:
+            others.append((category, dets))
+
+    riders: list[list[Detection]] = []
+    events: list[Event] = []
+    for category, dets in others:
+        if category == "pedestrian" and any(_rides_bicycle(dets, bike) for bike in bike_tracks):
             riders.append(dets)
-            category = "cyclist"
+            continue
         event = _track_event(dets, category, fps)
         if event is not None:
             events.append(event)
-    for dets in bike_tracks:
-        if any(_rides_bicycle(rider, dets) for rider in riders):
+    claimed: set[int] = set()
+    for bike in bike_tracks:
+        overlapping = [index for index, rider in enumerate(riders) if _rides_bicycle(rider, bike)]
+        fresh = [index for index in overlapping if index not in claimed]
+        if fresh:
+            best = max((riders[index] for index in fresh), key=len)
+            event = _track_event(best, "cyclist", fps)
+            if event is not None:
+                events.append(event)
+            claimed.update(fresh)
             continue
-        event = _track_event(dets, "cyclist", fps)
+        if overlapping:
+            continue
+        event = _track_event(bike, "cyclist", fps)
+        if event is not None:
+            events.append(event)
+    for index, rider in enumerate(riders):
+        if index in claimed:
+            continue
+        event = _track_event(rider, "cyclist", fps)
         if event is not None:
             events.append(event)
     return events
@@ -152,7 +171,7 @@ def _majority(dets: list[Detection]) -> str:
     scores: dict[str, list[float]] = defaultdict(list)
     for detection in dets:
         scores[detection.category].append(detection.score)
-    return max(scores, key=lambda category: (len(scores[category]), sum(scores[category])))
+    return max(scores, key=lambda category: (len(scores[category]), sum(scores[category]), category))
 
 
 def _rides_bicycle(person: list[Detection], bicycles: list[Detection]) -> bool:
