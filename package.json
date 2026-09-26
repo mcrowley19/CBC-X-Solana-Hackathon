@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "setup": "tsx scripts/setup-token.ts",
-    "e2e": "tsx scripts/e2e.ts"
+    "e2e": "tsx scripts/e2e.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@solana/spl-token": "^0.4.15",
@@ -20,17 +22,19 @@
     "next": "16.3.6",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^22.20.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^5.0.2"
   }
 }

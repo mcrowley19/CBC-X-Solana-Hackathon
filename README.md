@@ -16,6 +16,30 @@ npm run dev
 If the airdrop is rate-limited, send devnet SOL to the printed treasury address at
 https://faucet.solana.com and run `npm run setup` again.
 
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run setup` | Creates the treasury and MILE token on the cluster in `SOLANA_RPC_URL` |
+| `npm run dev` | Runs the app |
+| `npm test` | Unit tests (reward maths, validation, memo parsing, auth) |
+| `npm run e2e` | Real payout against a running server: `HOST=http://localhost:3000 npm run e2e` |
+| `npm run typecheck` / `npm run lint` | Static checks |
+
+See `.env.example` for every setting.
+
+### Running against a local validator
+
+```bash
+# In its own terminal. --limit-ledger-size keeps hours of transaction history instead of the default ~2.5
+# minutes; the ledger view and duplicate-payout check read payouts back from that history.
+solana-test-validator --ledger .solana-ledger --limit-ledger-size 2000000
+# set SOLANA_RPC_URL and NEXT_PUBLIC_SOLANA_RPC_URL to http://127.0.0.1:8899 in .env.local
+npm run setup && npm run dev
+```
+
+Phantom's network setting doesn't matter here: the dashboard only reads your wallet address, and all payouts are made by the server. Phantom's own token list won't show MILE on a local chain; use the dashboard.
+
 ## How the pieces fit
 
 ```

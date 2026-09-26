@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletReadyState } from "@solana/wallet-adapter-base";
 
@@ -11,9 +11,17 @@ export function shorten(address: string) {
   return `${address.slice(0, 4)}…${address.slice(-4)}`;
 }
 
+const noopSubscribe = () => () => {};
+
+/** False during server render and hydration, true afterwards; wallet detection only exists in the browser. */
+function useIsClient() {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
+
 export function ConnectButton({ primary = false }: { primary?: boolean }) {
   const { wallets, select, publicKey, disconnect, connecting } = useWallet();
   const [open, setOpen] = useState(false);
+  const isClient = useIsClient();
   const installed = wallets.filter((w) => w.readyState === WalletReadyState.Installed);
 
   const style = primary
@@ -24,6 +32,14 @@ export function ConnectButton({ primary = false }: { primary?: boolean }) {
     return (
       <button type="button" onClick={() => disconnect()} className={style} title="Disconnect">
         {shorten(publicKey.toBase58())} · Disconnect
+      </button>
+    );
+  }
+
+  if (!isClient) {
+    return (
+      <button type="button" className={style} disabled>
+        Connect wallet
       </button>
     );
   }

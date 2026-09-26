@@ -1,32 +1,44 @@
+import { isDemoMode } from "@/lib/config";
+import { internalError, jsonError, parseJsonBody } from "@/lib/http";
 import { processSession } from "@/lib/process-session";
-import type { AnnotatedEvent } from "@/lib/rewards";
+import { RATES, type AnnotatedEvent } from "@/lib/rewards";
+import { demoDriveSchema } from "@/lib/schemas";
 
 /**
- * Demo-only: simulates the Pi finishing a drive so the reward flow can be shown
- * without hardware. Disabled unless DEMO_MODE=true.
+ * Demo only: simulates the Pi finishing a drive so the reward flow can be shown without hardware.
+ * It is unauthenticated, so it's disabled unless DEMO_MODE=true. Never enable it on a treasury holding real value.
  */
-const EVENT_TYPES = ["pedestrian", "stop_sign", "lane_change", "traffic_light", "cyclist", "hazard", "near_miss"];
+const EVENT_TYPES = Object.keys(RATES.events).filter((type) => type !== "other");
 
-export async function POST(request: Request) {
-  if (process.env.DEMO_MODE !== "true") {
-    return Response.json({ error: "Demo mode is disabled" }, { status: 403 });
-  }
-  const { wallet } = (await request.json().catch(() => ({}))) as { wallet?: string };
-  if (!wallet) return Response.json({ error: "wallet is required" }, { status: 400 });
-
+function randomDrive() {
   const durationSeconds = 60 * (5 + Math.floor(Math.random() * 40));
+  // Skewed towards the start of the list so common events appear more often than rare ones.
   const events: AnnotatedEvent[] = Array.from({ length: Math.floor(Math.random() * 12) }, () => ({
     type: EVENT_TYPES[Math.floor(Math.random() ** 1.6 * EVENT_TYPES.length)],
     t: Math.round(Math.random() * durationSeconds),
     confidence: 0.6 + Math.random() * 0.4,
   }));
+  return { durationSeconds, events };
+}
 
-  const result = await processSession({
-    sessionId: `demo-${Date.now().toString(36)}`,
-    wallet,
-    deviceId: "demo-pi",
-    durationSeconds,
-    events,
-  });
-  return Response.json({ ...result.body, simulated: { durationSeconds, events } }, { status: result.status });
+export async function POST(request: Request) {
+  if (!isDemoMode()) return jsonError(403, "Demo mode is disabled");
+
+  const body = await parseJsonBody(request, demoDriveSchema);
+  if (body.response) return body.response;
+
+  try {
+    const simulated = randomDrive();
+    const outcome = await processSession({
+      sessionId: `demo-${Date.now().toString(36)}`,
+      wallet: body.data.wallet,
+      deviceId: "demo-pi",
+      ...simulated,
+    });
+    return outcome.ok
+      ? Response.json({ ...outcome.result, simulated }, { status: outcome.status })
+      : jsonError(outcome.status, outcome.error);
+  } catch (error) {
+    return internalError("Demo payout", error);
+  }
 }

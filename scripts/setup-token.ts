@@ -1,6 +1,6 @@
 /**
- * One-time devnet setup:
- *   1. Creates (or reuses) a treasury keypair and funds it with devnet SOL.
+ * One-time setup for whichever cluster SOLANA_RPC_URL points at (devnet by default):
+ *   1. Creates (or reuses) a treasury keypair and funds it with an airdrop.
  *   2. Creates the MILE reward token (Token-2022 with on-chain name/symbol so wallets show it).
  *   3. Mints the initial supply into the treasury.
  *   4. Writes everything to .env.local.
@@ -74,18 +74,21 @@ async function main() {
   env.DEVICE_API_KEY ||= crypto.randomBytes(24).toString("hex");
   env.DEMO_MODE ||= "true";
   writeEnv(env);
+  env.NEXT_PUBLIC_SOLANA_RPC_URL = rpcUrl;
+  writeEnv(env);
+  console.log(`Cluster: ${rpcUrl}`);
   console.log(`Treasury: ${treasury.publicKey.toBase58()}`);
 
   let balance = await connection.getBalance(treasury.publicKey);
   if (balance < 0.05 * LAMPORTS_PER_SOL) {
-    console.log("Requesting devnet airdrop...");
+    console.log("Requesting airdrop...");
     try {
       const sig = await connection.requestAirdrop(treasury.publicKey, 1 * LAMPORTS_PER_SOL);
       await connection.confirmTransaction(sig, "confirmed");
       balance = await connection.getBalance(treasury.publicKey);
     } catch (e) {
       console.error(
-        `\nAirdrop failed (devnet faucet is often rate-limited): ${(e as Error).message}\n` +
+        `\nAirdrop failed (public faucets are often rate-limited): ${(e as Error).message}\n` +
           `Fund the treasury manually at https://faucet.solana.com with address:\n\n  ${treasury.publicKey.toBase58()}\n\n` +
           `then run \`npm run setup\` again.`,
       );
@@ -96,7 +99,11 @@ async function main() {
 
   // 2. Mint
   let mint: PublicKey;
-  if (env.REWARD_MINT) {
+  const existingMint = env.REWARD_MINT ? await connection.getAccountInfo(new PublicKey(env.REWARD_MINT)) : null;
+  if (env.REWARD_MINT && !existingMint) {
+    console.log(`Mint ${env.REWARD_MINT} doesn't exist on this cluster, creating a new one.`);
+  }
+  if (env.REWARD_MINT && existingMint) {
     mint = new PublicKey(env.REWARD_MINT);
     console.log(`Reusing mint: ${mint.toBase58()}`);
   } else {
@@ -153,7 +160,7 @@ async function main() {
     writeEnv(env);
   }
 
-  console.log(`\nDone. Explorer: https://explorer.solana.com/address/${mint.toBase58()}?cluster=devnet`);
+  console.log(`\nDone. Explorer: https://explorer.solana.com/address/${mint.toBase58()}?cluster=${rpcUrl.includes("devnet") ? "devnet" : `custom&customUrl=${encodeURIComponent(rpcUrl)}`}`);
   console.log(`Device API key (give this to the Pi): ${env.DEVICE_API_KEY}`);
 }
 

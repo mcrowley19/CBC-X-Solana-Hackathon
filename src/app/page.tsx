@@ -1,10 +1,10 @@
 import { ConnectButton } from "@/components/ConnectButton";
 import { Ledger } from "@/components/Ledger";
-import { RATES } from "@/lib/rewards";
+import { CLUSTER_LABEL, TOKEN_SYMBOL as SYMBOL, explorerAddress } from "@/lib/cluster";
+import { isDemoMode } from "@/lib/config";
+import { RATES, type EventType } from "@/lib/rewards";
 
-const SYMBOL = process.env.NEXT_PUBLIC_TOKEN_SYMBOL ?? "MILE";
-
-const EVENT_LABELS: Record<string, string> = {
+const EVENT_LABELS: Record<EventType, string> = {
   near_miss: "Near miss",
   collision: "Collision",
   hazard: "Road hazard",
@@ -19,7 +19,7 @@ const EVENT_LABELS: Record<string, string> = {
 };
 
 export default function Home() {
-  const demoMode = process.env.DEMO_MODE === "true";
+  const demoMode = isDemoMode();
   const mint = process.env.NEXT_PUBLIC_REWARD_MINT;
 
   return (
@@ -47,7 +47,7 @@ export default function Home() {
       <main className="mx-auto max-w-7xl px-5 md:px-10">
         <section className="grid gap-12 pt-[clamp(3rem,8vw,6rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,0.75fr)] lg:gap-20">
           <div>
-            <p className="kicker rise mb-6">Solana devnet · Dashcam rewards</p>
+            <p className="kicker rise mb-6">Solana {CLUSTER_LABEL} · Dashcam rewards</p>
             <h1 className="rise rise-1 font-display text-[clamp(3rem,7.5vw,6.25rem)] font-light leading-[0.92] tracking-[-0.02em]">
               Keep the camera
               <br />
@@ -88,7 +88,7 @@ export default function Home() {
             {Object.entries(RATES.events).map(([type, rate]) => (
               <div key={type} className="flex justify-between border-b border-line py-3">
                 <dt>
-                  {EVENT_LABELS[type] ?? type} <span className="text-ink-tertiary">· {type}</span>
+                  {EVENT_LABELS[type as EventType]} <span className="text-ink-tertiary">· {type}</span>
                 </dt>
                 <dd>
                   +{rate} {SYMBOL}
@@ -130,7 +130,7 @@ export default function Home() {
         <span className="kicker">Logbook · Hackathon build</span>
         {mint && (
           <a
-            href={`https://explorer.solana.com/address/${mint}?cluster=devnet`}
+            href={explorerAddress(mint)}
             target="_blank"
             rel="noreferrer"
             className="kicker underline decoration-ink-tertiary underline-offset-4 hover:text-accent"

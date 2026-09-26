@@ -1,12 +1,9 @@
 import "server-only";
-import bs58 from "bs58";
 import {
   Connection,
-  Keypair,
   PublicKey,
   Transaction,
   TransactionInstruction,
-  clusterApiUrl,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import {
@@ -15,48 +12,24 @@ import {
   createTransferCheckedInstruction,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
-import { TOKEN_DECIMALS, toBaseUnits, type RewardBreakdown } from "./rewards";
+import { getConfig } from "./config";
+import { TOKEN_DECIMALS, fromBaseUnits, type RewardBreakdown } from "./rewards";
+import { MEMO_APP, parseMemo, type PayoutMemo, type RewardRecord } from "./schemas";
 
 /**
  * The chain is our database: every payout carries a memo describing the session,
  * so reward history and duplicate checks are read straight back from Solana.
  */
 const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
-const MEMO_APP = "dashcam";
 
-export type PayoutMemo = {
-  app: typeof MEMO_APP;
-  s: string; // session id
-  d?: string; // device id
-  m: number; // minutes recorded
-  e: number; // events annotated
-  r: number; // reward (whole tokens)
-};
+let connection: Connection | undefined;
 
-export type RewardRecord = PayoutMemo & {
-  signature: string;
-  blockTime: number | null;
-};
-
-function required(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing env var ${name}. Run \`npm run setup\` first.`);
-  return v;
+function getConnection() {
+  connection ??= new Connection(getConfig().rpcUrl, "confirmed");
+  return connection;
 }
 
-let cached: { connection: Connection; treasury: Keypair; mint: PublicKey } | null = null;
-
-export function getSolana() {
-  if (!cached) {
-    cached = {
-      connection: new Connection(process.env.SOLANA_RPC_URL || clusterApiUrl("devnet"), "confirmed"),
-      treasury: Keypair.fromSecretKey(bs58.decode(required("TREASURY_SECRET_KEY"))),
-      mint: new PublicKey(required("REWARD_MINT")),
-    };
-  }
-  return cached;
-}
-
+/** Returns the key for a valid wallet address (a point on the ed25519 curve), else null. */
 export function parseWallet(address: string): PublicKey | null {
   try {
     const key = new PublicKey(address);
@@ -66,49 +39,34 @@ export function parseWallet(address: string): PublicKey | null {
   }
 }
 
-function driverTokenAccount(wallet: PublicKey) {
-  const { mint } = getSolana();
-  return getAssociatedTokenAddressSync(mint, wallet, false, TOKEN_2022_PROGRAM_ID);
-}
-
-/** RPC returns memos as "[len] {json}"; multiple memos are joined with "; ". */
-function parseMemo(raw: string | null): PayoutMemo | null {
-  if (!raw) return null;
-  const start = raw.indexOf("{");
-  if (start === -1) return null;
-  try {
-    const parsed = JSON.parse(raw.slice(start));
-    return parsed?.app === MEMO_APP ? (parsed as PayoutMemo) : null;
-  } catch {
-    return null;
-  }
+function rewardTokenAccount(owner: PublicKey) {
+  return getAssociatedTokenAddressSync(getConfig().mint, owner, false, TOKEN_2022_PROGRAM_ID);
 }
 
 export async function getRewardHistory(wallet: PublicKey, limit = 50): Promise<RewardRecord[]> {
-  const { connection } = getSolana();
-  const sigs = await connection.getSignaturesForAddress(driverTokenAccount(wallet), { limit });
-  const records: RewardRecord[] = [];
-  for (const sig of sigs) {
-    if (sig.err) continue;
-    const memo = parseMemo(sig.memo);
-    if (memo) records.push({ ...memo, signature: sig.signature, blockTime: sig.blockTime ?? null });
-  }
-  return records;
+  const signatures = await getConnection().getSignaturesForAddress(rewardTokenAccount(wallet), { limit });
+  return signatures.flatMap((sig) => {
+    const memo = sig.err ? null : parseMemo(sig.memo);
+    return memo ? [{ ...memo, signature: sig.signature, blockTime: sig.blockTime ?? null }] : [];
+  });
 }
 
 export async function getTokenBalance(wallet: PublicKey): Promise<number> {
-  const { connection } = getSolana();
-  try {
-    const bal = await connection.getTokenAccountBalance(driverTokenAccount(wallet));
-    return bal.value.uiAmount ?? 0;
-  } catch {
-    return 0; // account doesn't exist yet
-  }
+  const account = rewardTokenAccount(wallet);
+  // A driver with no rewards yet has no token account; that's a zero balance, not an error.
+  if (!(await getConnection().getAccountInfo(account))) return 0;
+  const balance = await getConnection().getTokenAccountBalance(account);
+  return balance.value.uiAmount ?? 0;
 }
 
+/**
+ * Looks for an earlier payout of this session in the driver's recent history.
+ * Checks the last 200 transactions, which is plenty for a demo; a production system
+ * would keep an indexed payouts table instead.
+ */
 export async function findExistingPayout(wallet: PublicKey, sessionId: string) {
   const history = await getRewardHistory(wallet, 200);
-  return history.find((r) => r.s === sessionId) ?? null;
+  return history.find((record) => record.s === sessionId) ?? null;
 }
 
 export async function payReward(opts: {
@@ -117,27 +75,37 @@ export async function payReward(opts: {
   deviceId?: string;
   reward: RewardBreakdown;
 }): Promise<string> {
-  const { connection, treasury, mint } = getSolana();
-  const source = getAssociatedTokenAddressSync(mint, treasury.publicKey, false, TOKEN_2022_PROGRAM_ID);
-  const destination = driverTokenAccount(opts.wallet);
+  const { treasury, mint } = getConfig();
+  const source = rewardTokenAccount(treasury.publicKey);
+  const destination = rewardTokenAccount(opts.wallet);
 
   const memo: PayoutMemo = {
     app: MEMO_APP,
     s: opts.sessionId,
     ...(opts.deviceId ? { d: opts.deviceId } : {}),
     m: opts.reward.minutes,
-    e: Object.values(opts.reward.eventCounts).reduce((a, b) => a + b, 0),
-    r: opts.reward.total,
+    e: opts.reward.eventCount,
+    r: fromBaseUnits(opts.reward.amount),
   };
 
   const tx = new Transaction().add(
     // Treasury pays rent for the driver's token account on their first reward.
     createAssociatedTokenAccountIdempotentInstruction(
-      treasury.publicKey, destination, opts.wallet, mint, TOKEN_2022_PROGRAM_ID,
+      treasury.publicKey,
+      destination,
+      opts.wallet,
+      mint,
+      TOKEN_2022_PROGRAM_ID,
     ),
     createTransferCheckedInstruction(
-      source, mint, destination, treasury.publicKey, toBaseUnits(opts.reward.total), TOKEN_DECIMALS,
-      [], TOKEN_2022_PROGRAM_ID,
+      source,
+      mint,
+      destination,
+      treasury.publicKey,
+      opts.reward.amount,
+      TOKEN_DECIMALS,
+      [],
+      TOKEN_2022_PROGRAM_ID,
     ),
     new TransactionInstruction({
       programId: MEMO_PROGRAM_ID,
@@ -146,5 +114,5 @@ export async function payReward(opts: {
     }),
   );
 
-  return sendAndConfirmTransaction(connection, tx, [treasury], { commitment: "confirmed" });
+  return sendAndConfirmTransaction(getConnection(), tx, [treasury], { commitment: "confirmed" });
 }

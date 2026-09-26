@@ -6,14 +6,20 @@
  *   - a bonus for each event the annotation pipeline found (rarer, more valuable
  *     events such as near misses are worth more as training data).
  * Each session is capped so one bad or looping upload can't drain the treasury.
+ *
+ * All arithmetic is done in integer base units (bigint) so amounts are exact;
+ * RATES are written in whole tokens only for readability.
  */
 
 export const TOKEN_DECIMALS = 6;
+const UNITS_PER_TOKEN = 10n ** BigInt(TOKEN_DECIMALS);
 
 export const RATES = {
   perMinute: 1,
   maxPerSession: 500,
   minSessionSeconds: 60,
+  /** Events below this confidence don't earn a bonus. */
+  minConfidence: 0.5,
   events: {
     near_miss: 10,
     collision: 10,
@@ -26,58 +32,69 @@ export const RATES = {
     traffic_light: 1,
     lane_change: 0.5,
     other: 0.5,
-  } as Record<string, number>,
+  },
 } as const;
+
+export type EventType = keyof typeof RATES.events;
 
 export type AnnotatedEvent = {
   type: string;
-  /** seconds from start of clip */
+  /** Seconds from the start of the clip. */
   t?: number;
   confidence?: number;
 };
 
-export type SessionReport = {
-  sessionId: string;
-  wallet: string;
-  deviceId?: string;
-  durationSeconds: number;
-  events?: AnnotatedEvent[];
-};
-
 export type RewardBreakdown = {
   minutes: number;
-  base: number;
-  eventBonus: number;
-  eventCounts: Record<string, number>;
+  eventCounts: Partial<Record<EventType, number>>;
+  eventCount: number;
   capped: boolean;
-  total: number;
+  /** Exact payout in base units. */
+  amount: bigint;
 };
 
-/** Events below this confidence don't earn a bonus. */
-const MIN_CONFIDENCE = 0.5;
+export function toBaseUnits(tokens: number): bigint {
+  return BigInt(Math.round(tokens * 10 ** TOKEN_DECIMALS));
+}
 
-export function calculateReward(report: Pick<SessionReport, "durationSeconds" | "events">): RewardBreakdown {
-  const minutes = Math.floor(Math.max(0, report.durationSeconds) / 60);
-  const base = report.durationSeconds >= RATES.minSessionSeconds ? minutes * RATES.perMinute : 0;
+/** Exact for any amount below 2^53 base units (~9 billion tokens). */
+export function fromBaseUnits(units: bigint): number {
+  const whole = units / UNITS_PER_TOKEN;
+  const frac = units % UNITS_PER_TOKEN;
+  return Number(whole) + Number(frac) / Number(UNITS_PER_TOKEN);
+}
 
-  const eventCounts: Record<string, number> = {};
-  let eventBonus = 0;
-  for (const ev of report.events ?? []) {
-    if (ev.confidence !== undefined && ev.confidence < MIN_CONFIDENCE) continue;
-    const type = ev.type in RATES.events ? ev.type : "other";
+function isEventType(type: string): type is EventType {
+  return Object.hasOwn(RATES.events, type);
+}
+
+export function calculateReward(input: { durationSeconds: number; events?: AnnotatedEvent[] }): RewardBreakdown {
+  const minutes = Math.floor(Math.max(0, input.durationSeconds) / 60);
+  const eligible = input.durationSeconds >= RATES.minSessionSeconds;
+  let amount = eligible ? BigInt(minutes) * toBaseUnits(RATES.perMinute) : 0n;
+
+  const eventCounts: RewardBreakdown["eventCounts"] = {};
+  let eventCount = 0;
+  for (const event of input.events ?? []) {
+    if (event.confidence !== undefined && event.confidence < RATES.minConfidence) continue;
+    const type: EventType = isEventType(event.type) ? event.type : "other";
     eventCounts[type] = (eventCounts[type] ?? 0) + 1;
-    eventBonus += RATES.events[type];
+    eventCount += 1;
+    amount += toBaseUnits(RATES.events[type]);
   }
 
-  const raw = base + eventBonus;
-  const total = Math.min(raw, RATES.maxPerSession);
-  return { minutes, base, eventBonus, eventCounts, capped: raw > total, total: round(total) };
+  const cap = toBaseUnits(RATES.maxPerSession);
+  const capped = amount > cap;
+  return { minutes, eventCounts, eventCount, capped, amount: capped ? cap : amount };
 }
 
-export function toBaseUnits(amount: number): bigint {
-  return BigInt(Math.round(amount * 10 ** TOKEN_DECIMALS));
-}
-
-function round(n: number) {
-  return Math.round(n * 1e6) / 1e6;
+/** JSON-safe view of a breakdown for API responses (bigint can't be serialised). */
+export function serializeReward(reward: RewardBreakdown) {
+  return {
+    minutes: reward.minutes,
+    eventCounts: reward.eventCounts,
+    eventCount: reward.eventCount,
+    capped: reward.capped,
+    total: fromBaseUnits(reward.amount),
+  };
 }

@@ -1,67 +1,66 @@
 import "server-only";
-import { calculateReward, type SessionReport } from "./rewards";
+import { explorerTx } from "./cluster";
+import { calculateReward, serializeReward } from "./rewards";
+import type { SessionReport, SessionResult } from "./schemas";
 import { findExistingPayout, parseWallet, payReward } from "./solana";
 
-/** Guards against the same session being submitted twice concurrently on one instance. */
+/**
+ * Stops the same session being paid twice by concurrent requests on one server instance.
+ * Across instances, the on-chain duplicate check below is the backstop; a production
+ * system would use a database unique constraint on sessionId instead.
+ */
 const inFlight = new Set<string>();
 
-export type ProcessResult =
-  | { status: 200 | 201; body: Record<string, unknown> }
-  | { status: 400 | 409 | 500; body: { error: string } };
+export type ProcessOutcome =
+  | { ok: true; status: 200 | 201; result: SessionResult }
+  | { ok: false; status: 400 | 409; error: string };
 
-export function validateReport(input: unknown): SessionReport | string {
-  if (!input || typeof input !== "object") return "Body must be a JSON object";
-  const r = input as Record<string, unknown>;
-  if (typeof r.sessionId !== "string" || !/^[\w.:-]{1,64}$/.test(r.sessionId))
-    return "sessionId must be 1-64 chars of [A-Za-z0-9_.:-]";
-  if (typeof r.wallet !== "string") return "wallet is required";
-  if (typeof r.durationSeconds !== "number" || !Number.isFinite(r.durationSeconds) || r.durationSeconds < 0)
-    return "durationSeconds must be a non-negative number";
-  if (r.deviceId !== undefined && (typeof r.deviceId !== "string" || r.deviceId.length > 32))
-    return "deviceId must be a string of at most 32 chars";
-  if (r.events !== undefined) {
-    if (!Array.isArray(r.events)) return "events must be an array";
-    if (r.events.some((e) => !e || typeof e !== "object" || typeof (e as { type?: unknown }).type !== "string"))
-      return "each event needs a string `type`";
-  }
-  return r as unknown as SessionReport;
-}
-
-export async function processSession(report: SessionReport): Promise<ProcessResult> {
+/** Calculates and pays the reward for one reported drive. Throws only on unexpected (RPC/chain) failures. */
+export async function processSession(report: SessionReport): Promise<ProcessOutcome> {
   const wallet = parseWallet(report.wallet);
-  if (!wallet) return { status: 400, body: { error: "wallet is not a valid Solana address" } };
+  if (!wallet) return { ok: false, status: 400, error: "wallet is not a valid Solana address" };
 
   const reward = calculateReward(report);
-  if (reward.total <= 0) {
-    return { status: 200, body: { sessionId: report.sessionId, reward, paid: false, reason: "Nothing to reward" } };
+  if (reward.amount === 0n) {
+    return {
+      ok: true,
+      status: 200,
+      result: { paid: false, sessionId: report.sessionId, reward: serializeReward(reward), reason: "Nothing to reward" },
+    };
   }
 
   if (inFlight.has(report.sessionId)) {
-    return { status: 409, body: { error: "Session is already being processed" } };
+    return { ok: false, status: 409, error: "Session is already being processed" };
   }
   inFlight.add(report.sessionId);
   try {
     const existing = await findExistingPayout(wallet, report.sessionId);
     if (existing) {
       return {
+        ok: true,
         status: 200,
-        body: { sessionId: report.sessionId, paid: true, duplicate: true, signature: existing.signature, reward: existing.r },
+        result: {
+          paid: true,
+          duplicate: true,
+          sessionId: report.sessionId,
+          signature: existing.signature,
+          reward: { total: existing.r },
+        },
       };
     }
+
     const signature = await payReward({ wallet, sessionId: report.sessionId, deviceId: report.deviceId, reward });
     return {
+      ok: true,
       status: 201,
-      body: {
-        sessionId: report.sessionId,
+      result: {
         paid: true,
-        reward,
+        sessionId: report.sessionId,
         signature,
-        explorer: `https://explorer.solana.com/tx/${signature}?cluster=devnet`,
+        explorer: explorerTx(signature),
+        reward: serializeReward(reward),
       },
     };
-  } catch (e) {
-    console.error("payout failed", e);
-    return { status: 500, body: { error: `Payout failed: ${(e as Error).message}` } };
   } finally {
     inFlight.delete(report.sessionId);
   }
