@@ -9,10 +9,13 @@ from datetime import datetime, timezone
 
 try:
     from sense_hat import SenseHat
-    sense = SenseHat()
+
+    sense = SenseHat(imu_only=True)
+    print("Sense HAT sensors detected")
     SENSE_HAT_AVAILABLE = True
 except Exception as e:
-    print(f"Sense HAT not available ({e}) — continuing without it.")
+    print(f"Sense HAT sensor failure: {e}")
+    print("Check GPIO alignment and I2C addresses with: sudo i2cdetect -y 1")
     SENSE_HAT_AVAILABLE = False
 
 
