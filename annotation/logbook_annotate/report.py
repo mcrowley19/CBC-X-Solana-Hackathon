@@ -10,8 +10,16 @@ from logbook_annotate.ingest import SESSION_ID, is_pubkey
 from logbook_annotate.models import Clip, Event
 
 
+# The server accepts at most this many track points; longer tracks are thinned evenly first.
+MAX_TRACK_POINTS = 5000
+
+
 def session_body(clip: Clip, events: list[Event]) -> dict:
-    """The only fields POST /api/sessions keeps. Extra keys are stripped server-side."""
+    """The only fields POST /api/sessions keeps. Extra keys are stripped server-side.
+
+    The phone track goes along when there is one: the server simplifies it to fit the payout memo,
+    and the dashboard draws it as the trip's route.
+    """
     body: dict[str, object] = {
         "sessionId": clip.session_id,
         "wallet": clip.wallet,
@@ -22,6 +30,12 @@ def session_body(clip: Clip, events: list[Event]) -> dict:
             for event in events
         ],
     }
+    if clip.track:
+        step = max(1, math.ceil(len(clip.track) / MAX_TRACK_POINTS))
+        body["track"] = [
+            {"t": round(point.t, 3), "lat": round(point.lat, 5), "lng": round(point.lng, 5)}
+            for point in clip.track[::step]
+        ]
     return body
 
 

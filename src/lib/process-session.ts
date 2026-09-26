@@ -49,7 +49,13 @@ export async function processSession(report: SessionReport): Promise<ProcessOutc
       };
     }
 
-    const signature = await payReward({ wallet, sessionId: report.sessionId, deviceId: report.deviceId, reward });
+    const signature = await payReward({
+      wallet,
+      sessionId: report.sessionId,
+      deviceId: report.deviceId,
+      reward,
+      track: report.track,
+    });
     return {
       ok: true,
       status: 201,

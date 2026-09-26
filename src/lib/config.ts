@@ -46,7 +46,7 @@ export function getConfig(): ServerConfig {
 
 /**
  * The account the dashboard opens on: the wallet the dashcam pays out to. Read separately,
- * like DEMO_MODE, so the page doesn't need the full payout config. Undefined if unset or not a valid address.
+ * so the page doesn't need the full payout config. Undefined if unset or not a valid address.
  */
 export function driverWallet(): string | undefined {
   const value = process.env.DRIVER_WALLET?.trim();
@@ -56,9 +56,4 @@ export function driverWallet(): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-/** Read separately so pages can check it without requiring the full payout config. */
-export function isDemoMode(): boolean {
-  return process.env.DEMO_MODE === "true";
 }

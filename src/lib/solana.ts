@@ -1,6 +1,7 @@
 import "server-only";
 import {
   Connection,
+  PACKET_DATA_SIZE,
   PublicKey,
   Transaction,
   TransactionInstruction,
@@ -14,6 +15,7 @@ import {
 } from "@solana/spl-token";
 import { getConfig } from "./config";
 import { TOKEN_DECIMALS, fromBaseUnits, type RewardBreakdown } from "./rewards";
+import { encodeRoute, type LatLng } from "./route";
 import { MEMO_APP, parseMemo, type PayoutMemo, type RewardRecord } from "./schemas";
 
 /**
@@ -74,6 +76,8 @@ export async function payReward(opts: {
   sessionId: string;
   deviceId?: string;
   reward: RewardBreakdown;
+  /** The drive's GPS track. As much of it as fits goes in the memo. */
+  track?: LatLng[];
 }): Promise<string> {
   const { treasury, mint } = getConfig();
   const source = rewardTokenAccount(treasury.publicKey);
@@ -88,31 +92,65 @@ export async function payReward(opts: {
     r: fromBaseUnits(opts.reward.amount),
   };
 
-  const tx = new Transaction().add(
-    // Treasury pays rent for the driver's token account on their first reward.
-    createAssociatedTokenAccountIdempotentInstruction(
-      treasury.publicKey,
-      destination,
-      opts.wallet,
-      mint,
-      TOKEN_2022_PROGRAM_ID,
-    ),
-    createTransferCheckedInstruction(
-      source,
-      mint,
-      destination,
-      treasury.publicKey,
-      opts.reward.amount,
-      TOKEN_DECIMALS,
-      [],
-      TOKEN_2022_PROGRAM_ID,
-    ),
-    new TransactionInstruction({
-      programId: MEMO_PROGRAM_ID,
-      keys: [],
-      data: Buffer.from(JSON.stringify(memo), "utf8"),
-    }),
-  );
+  const build = (memoBody: PayoutMemo) =>
+    new Transaction().add(
+      // Treasury pays rent for the driver's token account on their first reward.
+      createAssociatedTokenAccountIdempotentInstruction(
+        treasury.publicKey,
+        destination,
+        opts.wallet,
+        mint,
+        TOKEN_2022_PROGRAM_ID,
+      ),
+      createTransferCheckedInstruction(
+        source,
+        mint,
+        destination,
+        treasury.publicKey,
+        opts.reward.amount,
+        TOKEN_DECIMALS,
+        [],
+        TOKEN_2022_PROGRAM_ID,
+      ),
+      new TransactionInstruction({
+        programId: MEMO_PROGRAM_ID,
+        keys: [],
+        data: Buffer.from(JSON.stringify(memoBody), "utf8"),
+      }),
+    );
+
+  let tx = build(memo);
+  if (opts.track && opts.track.length >= 2) {
+    const route = encodeRoute(opts.track, routeBudget(tx, treasury.publicKey));
+    if (route) {
+      const withRoute = build({ ...memo, p: route });
+      // The budget is exact, but if anything about the wire format ever changes, pay without the route
+      // rather than fail the payout.
+      if (wireSize(withRoute, treasury.publicKey) <= PACKET_DATA_SIZE) tx = withRoute;
+    }
+  }
 
   return sendAndConfirmTransaction(getConnection(), tx, [treasury], { commitment: "confirmed" });
+}
+
+/** Any 32 bytes work for measuring; the real blockhash is fetched when the transaction is sent. */
+const MEASURING_BLOCKHASH = PublicKey.default.toBase58();
+
+/** How many bytes the signed transaction will take on the wire. */
+function wireSize(tx: Transaction, feePayer: PublicKey): number {
+  tx.feePayer = feePayer;
+  tx.recentBlockhash = MEASURING_BLOCKHASH;
+  const message = tx.compileMessage().serialize().length;
+  tx.recentBlockhash = undefined;
+  return 1 + 64 + message; // one signature, with its compact-u16 count
+}
+
+/**
+ * The most JSON-escaped polyline characters the memo can grow by before the transaction stops
+ * fitting in a packet. Adding the field costs `,"p":""` plus one byte for the memo's length prefix
+ * once it passes 127 bytes.
+ */
+function routeBudget(withoutRoute: Transaction, feePayer: PublicKey): number {
+  const overhead = ',"p":""'.length + 1;
+  return PACKET_DATA_SIZE - wireSize(withoutRoute, feePayer) - overhead;
 }

@@ -2,8 +2,9 @@
 
 Drivers earn **MILE** (an SPL Token-2022 on devnet) for every minute of dashcam footage and every
 road event the annotation pipeline finds. Payouts are real on-chain transfers, and each carries a memo
-describing the drive. The chain doubles as the database: reward history and duplicate checks are read
-back from Solana, so no extra storage is needed.
+describing the drive, including the route as an encoded polyline when the phone recorded a GPS track.
+The chain doubles as the database: reward history, duplicate checks and the little route map on each
+trip are all read back from Solana, so no extra storage is needed.
 
 ## Setup
 
@@ -52,7 +53,6 @@ Driver account  ◀── dashboard reads balance + memo history from chain ◀�
 |---|---|---|
 | `POST /api/sessions` | Pi / annotation worker (`Authorization: Bearer $DEVICE_API_KEY`) | Calculates the reward and pays it. Idempotent on `sessionId`. |
 | `GET /api/drivers/:wallet` | Dashboard | Returns balance, totals and per-drive history. |
-| `POST /api/demo/drive` | Dashboard "Simulate a drive" button | Fakes a drive for demos. Only works when `DEMO_MODE=true`. |
 
 The reward rules are in `src/lib/rewards.ts`: a per-minute base rate, per-event bonuses, a confidence
 threshold and a per-session cap.
@@ -70,8 +70,21 @@ requests.post(f"{HOST}/api/sessions",
         "wallet": DRIVER_WALLET,                 # driver's Solana address, configured on the device
         "durationSeconds": 1800,
         "events": [{"type": "pedestrian", "t": 42.1, "confidence": 0.93}],
+        # Optional: the phone's GPS track (up to 5000 points). Tap the trip in the dashboard to see it.
+        "track": [{"t": 0, "lat": 51.4545, "lng": -2.5879}, {"t": 1, "lat": 51.4546, "lng": -2.5878}],
     }, timeout=60).json()
 ```
+
+### Routes
+
+A payout memo has to share one Solana packet with the token transfer, so the track is simplified
+(Douglas-Peucker) until its Google-style encoded polyline fits the bytes left, roughly 150 to 200
+points, and stored under `p` in the memo. The dashboard decodes it and draws it in an inline SVG map
+with the distance; nothing is fetched from a map provider. `src/lib/route.ts` has both ends.
+
+The annotation pipeline sends the track automatically when the clip folder has a `track.json` (see
+`annotation/README.md`). To put a trip with a route on your own dashboard without a Pi:
+`WALLET=$DRIVER_WALLET HOST=http://localhost:3456 npm run e2e`.
 
 Event types: `near_miss`, `collision`, `hazard`, `pedestrian`, `cyclist`, `emergency_vehicle`,
 `red_light`, `stop_sign`, `traffic_light`, `lane_change`. Anything else counts as `other`.
@@ -79,6 +92,6 @@ Event types: `near_miss`, `collision`, `hazard`, `pedestrian`, `cyclist`, `emerg
 ## Deploying
 
 Add `TREASURY_SECRET_KEY`, `REWARD_MINT`, `NEXT_PUBLIC_REWARD_MINT`, `NEXT_PUBLIC_TOKEN_SYMBOL`,
-`DEVICE_API_KEY`, `DEMO_MODE` and optionally `SOLANA_RPC_URL` as environment variables (for example with
+`DEVICE_API_KEY` and optionally `SOLANA_RPC_URL` as environment variables (for example with
 `vercel env add`). Use a private RPC such as Helius for anything beyond a demo, because the public devnet
 endpoint rate-limits.

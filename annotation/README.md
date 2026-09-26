@@ -10,7 +10,9 @@ device/data/clip_20260926T133000Z/
   track.json             # optional phone GPS: [{t, lat, lng, speed}]
 ```
 
-`speed` is metres per second, the unit the phone geolocation API returns.
+`speed` is metres per second, the unit the phone geolocation API returns. When `track.json` is present the
+route is posted with the session and stored, simplified, in the payout memo; the dashboard draws it when
+you tap the trip.
 
 ## Setup
 
@@ -40,9 +42,9 @@ Each clip lands in `annotation/out/<sessionId>/`:
 
 | File | What it is |
 |---|---|
-| `events.json` | Posted to `POST /api/sessions`. Minutes plus events decide the MILE payout. |
+| `events.json` | Posted to `POST /api/sessions`. Minutes plus events decide the MILE payout; the phone track, if any, rides along for the route map. |
 | `labels.json` | Per-frame boxes, track ids, and scores. |
-| `clip.json` | Local copy of the file hash, motion spikes, and phone track. These are not stored on-chain. |
+| `clip.json` | Local copy of the file hash, motion spikes, and the full phone track. Only a simplified route reaches the chain. |
 | `review.mp4` | The original frames with boxes, a paper card on rare events, and a tick bar. |
 | `receipt.json` | The Solana signature, after a successful post. |
 

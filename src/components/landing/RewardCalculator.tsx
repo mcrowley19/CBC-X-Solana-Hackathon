@@ -48,10 +48,10 @@ export function RewardCalculator() {
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-16">
       <div>
         <div className="flex items-baseline justify-between gap-4">
-          <label htmlFor="calc-minutes" className="font-mono text-[11px] uppercase tracking-[0.18em] text-white/50">
+          <label htmlFor="calc-minutes" className="text-[15px] text-white/55">
             Footage
           </label>
-          <span className="font-mono text-[13px] tabular-nums">
+          <span className="text-[15px] tabular-nums">
             {minutes} min
           </span>
         </div>
@@ -65,20 +65,20 @@ export function RewardCalculator() {
           onChange={(e) => setMinutes(Number(e.target.value))}
           className="range mt-4 w-full"
         />
-        <div className="mt-1 flex justify-between font-mono text-[11px] text-white/30">
+        <div className="mt-1 flex justify-between text-[13px] text-white/35">
           <span>0</span>
           <span>60</span>
           <span>120 min</span>
         </div>
 
-        <p className="mt-10 font-mono text-[11px] uppercase tracking-[0.18em] text-white/50">Events the annotator found</p>
+        <p className="mt-10 text-[15px] text-white/55">Events the annotator found</p>
         <ul className="mt-4 divide-y divide-white/10 border-y border-white/10">
           {PICKABLE.map((type) => {
             const n = counts[type] ?? 0;
             return (
               <li key={type} className="flex items-center gap-4 py-2.5">
                 <span className={`flex-1 text-[15px] ${n ? "text-white" : "text-white/45"}`}>{EVENT_LABELS[type]}</span>
-                <span className="w-16 text-right font-mono text-[12px] text-white/40 tabular-nums">
+                <span className="w-16 text-right text-[13px] text-white/45 tabular-nums">
                   {RATES.events[type]} {TOKEN_SYMBOL}
                 </span>
                 <div className="flex items-center">
@@ -91,7 +91,7 @@ export function RewardCalculator() {
                   >
                     −
                   </button>
-                  <span className="w-8 text-center font-mono text-[14px] tabular-nums">{n}</span>
+                  <span className="w-8 text-center text-[15px] tabular-nums">{n}</span>
                   <button
                     type="button"
                     aria-label={`More ${EVENT_LABELS[type]}`}
@@ -109,11 +109,11 @@ export function RewardCalculator() {
 
       <aside className="lg:sticky lg:top-24 lg:self-start">
         <div className="border border-white/15 p-6">
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-white/50">This drive pays</p>
-          <p className="mt-3 font-mono text-5xl leading-none tabular-nums sm:text-6xl">{formatMile(total)}</p>
-          <p className="mt-2 font-mono text-[12px] uppercase tracking-[0.14em] text-white/50">{TOKEN_SYMBOL}</p>
+          <p className="text-[15px] text-white/55">This drive pays</p>
+          <p className="mt-3 text-5xl leading-none tabular-nums sm:text-6xl">{formatMile(total)}</p>
+          <p className="mt-2 text-[15px] text-white/55">{TOKEN_SYMBOL}</p>
 
-          <dl className="mt-8 space-y-2 border-t border-white/10 pt-5 font-mono text-[13px]">
+          <dl className="mt-8 space-y-2 border-t border-white/10 pt-5 text-[15px]">
             <div className="flex justify-between gap-4">
               <dt className="text-white/50">
                 {reward.minutes} min × {RATES.perMinute}
@@ -135,7 +135,7 @@ export function RewardCalculator() {
             )}
           </dl>
           <p className="mt-6 text-[13px] leading-relaxed text-white/45">
-            Computed by the same <span className="font-mono text-white/70">calculateReward()</span> the payout route runs before it signs a transfer.
+            Computed by the same <span className="text-white/70">calculateReward()</span> the payout route runs before it signs a transfer.
           </p>
         </div>
       </aside>

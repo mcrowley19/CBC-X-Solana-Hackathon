@@ -29,7 +29,7 @@ export function DevicesTab({ driver }: { driver: DriverSummary | null }) {
       {devices.length === 0 ? (
         <Empty>No dashcams yet. A dashcam shows up here once its first trip is paid out.</Empty>
       ) : (
-        <ul className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
+        <ul className="space-y-3 lg:space-y-4">
           {devices.map((device) => (
             <li key={device.id} className="rounded-3xl bg-surface px-5 pb-4 pt-5">
               <div className="flex items-center gap-3.5 [&>span:first-child]:bg-surface-hover">

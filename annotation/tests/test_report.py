@@ -1,7 +1,7 @@
 import re
 
-from logbook_annotate.models import Clip, Event
-from logbook_annotate.report import session_body
+from logbook_annotate.models import Clip, Event, TrackPoint
+from logbook_annotate.report import MAX_TRACK_POINTS, session_body
 from logbook_annotate.vlm.prompt import parse_events
 
 SESSION_ID = re.compile(r"^[\w.:-]{1,64}$")
@@ -54,3 +54,27 @@ def test_parser_keeps_only_rare_event_types():
     assert parse_events("I see events but this is not JSON") is None
     assert parse_events('{"events": [{"type": "nope"}]}') is None
     assert parse_events('{"events": "x"}') is None
+
+
+def test_phone_track_is_posted_rounded_and_thinned(tmp_path):
+    clip = Clip(
+        folder=tmp_path,
+        video=tmp_path / "clip.avi",
+        started_at="20260926T133000Z",
+        session_id="pi-01-20260926T133000Z",
+        device_id="pi-01",
+        wallet="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        duration_s=61.2,
+        width=320,
+        height=240,
+        fps=10,
+        clip_hash="abc",
+        track=[TrackPoint(t=i * 0.5, lat=51.4545 + i * 0.0000123456, lng=-2.5879, speed=3.0) for i in range(2 * MAX_TRACK_POINTS)],
+    )
+    body = session_body(clip, [])
+    track = body["track"]
+    assert len(track) <= MAX_TRACK_POINTS
+    assert track[0] == {"t": 0.0, "lat": 51.4545, "lng": -2.5879}
+    assert all(set(point) == {"t", "lat", "lng"} for point in track)
+    # Without a track the key is absent, so the server sees exactly what it used to.
+    assert "track" not in session_body(Clip(**{**clip.__dict__, "track": []}), [])

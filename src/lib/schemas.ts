@@ -20,14 +20,24 @@ export const sessionReportSchema = z.object({
     )
     .max(1000)
     .default([]),
+  /** The phone's GPS track, if it recorded one. Simplified to fit the payout memo. */
+  track: z
+    .array(
+      z.object({
+        t: z.number().optional(),
+        lat: z.number().min(-90).max(90),
+        lng: z.number().min(-180).max(180),
+        speed: z.number().optional(),
+      }),
+    )
+    .max(5000)
+    .optional(),
 });
 export type SessionReport = z.infer<typeof sessionReportSchema>;
 
-export const demoDriveSchema = z.object({ wallet: z.string().min(32).max(44) });
-
 /**
  * What each payout's memo records. Field names are short because memos live on-chain.
- * `r` is the reward in whole tokens.
+ * `r` is the reward in whole tokens; `p` is the drive's route as an encoded polyline (see route.ts).
  */
 export const MEMO_APP = "dashcam";
 export const payoutMemoSchema = z.object({
@@ -37,6 +47,7 @@ export const payoutMemoSchema = z.object({
   m: z.number(),
   e: z.number(),
   r: z.number(),
+  p: z.string().optional(),
 });
 export type PayoutMemo = z.infer<typeof payoutMemoSchema>;
 

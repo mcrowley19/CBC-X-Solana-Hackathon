@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import type { DriveResult } from "@/hooks/useDriver";
 import {
   devicesFromHistory,
   formatBalance,
@@ -10,10 +9,11 @@ import {
   monthActivity,
   tripTitle,
 } from "@/lib/activity";
-import { TOKEN_SYMBOL, explorerTx } from "@/lib/cluster";
+import { TOKEN_SYMBOL } from "@/lib/cluster";
 import type { DriverSummary, RewardRecord } from "@/lib/schemas";
 import type { Tab } from "./TopNav";
-import { Chevron, DeviceRow, ICON_CIRCLE, Icon, LINK, NOTICE, Row, SkeletonRow } from "./ui";
+import { TripDetail } from "./TripDetail";
+import { Chevron, DeviceRow, ICON_CIRCLE, ICON_CIRCLE_ACTIVE, Icon, NOTICE, Row, SkeletonRow } from "./ui";
 
 type Filter = "all" | "week" | "events" | "favorites";
 
@@ -23,71 +23,41 @@ const FILTERS: { id: Exclude<Filter, "favorites">; label: string }[] = [
   { id: "events", label: "Events" },
 ];
 
-function DriveStatus({ result }: { result: DriveResult }) {
-  if ("error" in result) return <>{result.error}</>;
-  if (!result.paid) return <>Nothing to reward for that trip.</>;
-  const minutes = Math.round((result.simulated?.durationSeconds ?? 0) / 60);
-  return (
-    <>
-      Trip logged: {minutes} min, {result.simulated?.events.length ?? 0} events,{" "}
-      <span className="text-positive">
-        +{formatTokens(result.reward.total)} {TOKEN_SYMBOL}
-      </span>
-      .{" "}
-      <a href={explorerTx(result.signature)} target="_blank" rel="noreferrer" className={LINK}>
-        View transaction
-      </a>
-    </>
-  );
-}
-
-function matches(record: RewardRecord, filter: Filter, query: string, title: string): boolean {
+function matches(record: RewardRecord, filter: Filter): boolean {
   if (filter === "week" && !isThisWeek(record)) return false;
   if (filter === "events" && record.e < 1) return false;
-  if (!query) return true;
-  const haystack = `${title} ${record.m} min ${record.e} events ${record.s} ${record.d ?? ""}`.toLowerCase();
-  return haystack.includes(query.toLowerCase());
+  return true;
 }
 
 export function HomeTab({
   driver,
   loading,
-  driving,
-  demoMode,
   error,
-  lastDrive,
-  onSimulate,
-  query,
-  onQuery,
   onNavigate,
 }: {
   driver: DriverSummary | null;
   loading: boolean;
-  driving: boolean;
-  demoMode: boolean;
   error: string | null;
-  lastDrive: DriveResult | null;
-  query: string;
-  onQuery: (query: string) => void;
-  onSimulate: () => void;
   onNavigate: (tab: Tab) => void;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
+  // The trip that's unfolded to show its route, by transaction signature.
+  const [open, setOpen] = useState<string | null>(null);
 
   const month = driver ? monthActivity(driver.history) : null;
   const devices = devicesFromHistory(driver?.history ?? []);
 
   const candidates = (driver?.history ?? [])
     .map((record) => ({ record, title: tripTitle(record) }))
-    .filter(({ record, title }) => matches(record, filter, query.trim(), title));
+    .filter(({ record }) => matches(record, filter));
   // Favourites stands in as the rider's best trips until trips can be starred.
   if (filter === "favorites") candidates.sort((a, b) => b.record.r - a.record.r);
   // Four trips on a phone; desktop has room for six (rows five and six are hidden below `lg`).
   const trips = candidates.slice(0, 6);
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:items-start lg:gap-x-14">
-      <section className="rise rounded-3xl bg-surface px-6 pb-6 pt-9 text-center lg:col-start-1 lg:px-7 lg:pb-7 lg:pt-8 lg:text-left">
+    <div>
+      <section className="rise rounded-3xl bg-surface px-6 pb-6 pt-9 text-center lg:px-7 lg:pb-7 lg:pt-8 lg:text-left">
         <p className="text-[15px] text-ink-soft">Current balance</p>
         <p className="mt-1.5 flex items-baseline justify-center gap-2 lg:justify-start">
           <span className="text-[48px] font-semibold leading-none tracking-[-0.03em] lg:text-[56px]">
@@ -115,23 +85,16 @@ export function HomeTab({
         </dl>
       </section>
 
-      {(error || lastDrive) && (
-        <div className="mt-4 space-y-3 lg:col-start-1">
-          {error && (
-            <p className={NOTICE} role="alert">
-              {error}
-            </p>
-          )}
-          {lastDrive && (
-            <p className={NOTICE} role="status">
-              <DriveStatus result={lastDrive} />
-            </p>
-          )}
+      {error && (
+        <div className="mt-4">
+          <p className={NOTICE} role="alert">
+            {error}
+          </p>
         </div>
       )}
 
       <section
-        className="rise rise-1 pt-9 lg:col-start-2 lg:row-span-3 lg:row-start-1 lg:pt-0"
+        className="rise rise-1 pt-9 lg:pt-12"
         aria-labelledby="recent-trips"
       >
         <div>
@@ -195,46 +158,56 @@ export function HomeTab({
           </p>
         ) : (
           <ol>
-            {trips.map(({ record, title }, i) => (
-              <li key={record.signature} className={i >= 4 ? "hidden lg:block" : undefined}>
-                <a
-                  href={explorerTx(record.signature)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="press flex items-center gap-3.5 py-4"
-                  aria-label={`${title}, ${record.m} min, +${formatTokens(record.r)} ${TOKEN_SYMBOL}. Open transaction`}
-                >
-                  <Row
-                    icon={
-                      <span className={ICON_CIRCLE}>
-                        <Icon>
-                          <circle cx="6" cy="18" r="2.5" />
-                          <circle cx="18" cy="6" r="2.5" />
-                          <path d="M8 16 16 8" />
-                        </Icon>
-                        <span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full border-2 border-canvas bg-accent text-[11px] font-bold text-canvas">
-                          {i + 1}
+            {trips.map(({ record, title }, i) => {
+              const isOpen = open === record.signature;
+              const panelId = `recent-${record.signature.slice(0, 8)}`;
+              return (
+                <li key={record.signature} className={i >= 4 ? "hidden lg:block" : undefined}>
+                  <button
+                    type="button"
+                    onClick={() => setOpen(isOpen ? null : record.signature)}
+                    aria-expanded={isOpen}
+                    aria-controls={panelId}
+                    className="press flex w-full items-center gap-3.5 py-4 text-left"
+                    aria-label={`${title}, ${record.m} min, +${formatTokens(record.r)} ${TOKEN_SYMBOL}. ${isOpen ? "Hide" : "Show"} route`}
+                  >
+                    <Row
+                      icon={
+                        <span className={isOpen ? ICON_CIRCLE_ACTIVE : ICON_CIRCLE}>
+                          <Icon>
+                            <circle cx="6" cy="18" r="2.5" />
+                            <circle cx="18" cy="6" r="2.5" />
+                            <path d="M8 16 16 8" />
+                          </Icon>
+                          <span
+                            className={`absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full border-2 border-canvas text-[11px] font-bold text-canvas ${
+                              isOpen ? "bg-ink" : "bg-accent"
+                            }`}
+                          >
+                            {i + 1}
+                          </span>
                         </span>
-                      </span>
-                    }
-                    title={title}
-                    meta={`${record.m} min · ${record.e} ${record.e === 1 ? "event" : "events"}`}
-                    value={`+${formatTokens(record.r)}`}
-                    sub={
-                      driver.balance > 0 && (
-                        <span className="text-positive">+{((record.r / driver.balance) * 100).toFixed(1)}%</span>
-                      )
-                    }
-                  />
-                </a>
-              </li>
-            ))}
+                      }
+                      title={title}
+                      meta={`${record.m} min · ${record.e} ${record.e === 1 ? "event" : "events"}`}
+                      value={`+${formatTokens(record.r)}`}
+                      sub={
+                        driver.balance > 0 && (
+                          <span className="text-positive">+{((record.r / driver.balance) * 100).toFixed(1)}%</span>
+                        )
+                      }
+                    />
+                  </button>
+                  {isOpen && <TripDetail record={record} id={panelId} />}
+                </li>
+              );
+            })}
           </ol>
         )}
       </section>
 
       {devices.length > 0 && (
-        <section className="rise rise-2 pt-5 lg:col-start-1 lg:pt-8" aria-labelledby="devices">
+        <section className="rise rise-2 pt-5 lg:pt-12" aria-labelledby="devices">
           <button
             type="button"
             id="devices"
@@ -254,36 +227,19 @@ export function HomeTab({
         </section>
       )}
 
-      {/* Phone only: the sidebar carries search-free navigation and this action on desktop. */}
+      {/* Phone only: a floating shortcut to connected devices. */}
       <div className="fixed inset-x-0 bottom-[calc(24px+env(safe-area-inset-bottom))] z-30 lg:hidden">
-        <div className="mx-auto flex max-w-lg items-center gap-3.5 px-5">
-          <label className="flex h-[60px] min-w-0 flex-1 items-center gap-3 rounded-full bg-surface px-[22px] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent">
-            <Icon stroke="var(--color-ink-placeholder)" width={2.5}>
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.5-3.5" />
-            </Icon>
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => onQuery(e.target.value)}
-              placeholder="Search trips"
-              aria-label="Search trips"
-              className="min-w-0 flex-1 bg-transparent text-[18px] text-ink outline-none placeholder:text-ink-placeholder"
-            />
-          </label>
+        <div className="mx-auto flex max-w-lg items-center justify-end px-5">
           <button
             type="button"
-            onClick={demoMode ? onSimulate : () => onNavigate("devices")}
-            disabled={demoMode && driving}
-            aria-label={demoMode ? (driving ? "Paying out…" : "Simulate a trip") : "Connected devices"}
-            title={demoMode ? "Simulate a trip" : "Connected devices"}
-            className="press flex size-[60px] flex-none items-center justify-center rounded-full bg-accent hover:bg-accent-deep disabled:opacity-50"
+            onClick={() => onNavigate("devices")}
+            aria-label="Connected devices"
+            title="Connected devices"
+            className="press flex size-[60px] flex-none items-center justify-center rounded-full bg-accent hover:bg-accent-deep"
           >
-            <span className={driving ? "animate-spin motion-reduce:animate-none" : ""}>
-              <Icon size={26} stroke="#000" width={2.5}>
-                <path d="M12 5v14M5 12h14" />
-              </Icon>
-            </span>
+            <Icon size={26} stroke="#000" width={2.5}>
+              <path d="M12 5v14M5 12h14" />
+            </Icon>
           </button>
         </div>
       </div>

@@ -35,6 +35,8 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 export const ICON_CIRCLE = "relative flex size-12 flex-none items-center justify-center rounded-full bg-surface";
+/** The same circle lit up: the row it belongs to is open. */
+export const ICON_CIRCLE_ACTIVE = "relative flex size-12 flex-none items-center justify-center rounded-full bg-accent text-canvas";
 
 export function Icon({ size = 22, stroke = "currentColor", width = 2, children }: { size?: number; stroke?: string; width?: number; children: ReactNode }) {
   return (

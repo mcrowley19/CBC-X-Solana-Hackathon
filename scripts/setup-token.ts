@@ -73,7 +73,6 @@ async function main() {
   env.SOLANA_RPC_URL = rpcUrl;
   env.TREASURY_SECRET_KEY = bs58.encode(treasury.secretKey);
   env.DEVICE_API_KEY ||= crypto.randomBytes(24).toString("hex");
-  env.DEMO_MODE ||= "true";
   // The driver account. Its secret key is kept so the MILE it earns can be moved later; the app never uses it.
   if (!env.DRIVER_WALLET) {
     const driver = Keypair.generate();

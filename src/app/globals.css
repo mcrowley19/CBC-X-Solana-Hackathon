@@ -77,6 +77,25 @@ body {
   .press:active { transform: none; }
 }
 
+/* Trip detail: the panel unfolds under its row and the route draws itself in */
+@keyframes unfold {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+.unfold { animation: unfold 0.25s ease-out both; }
+@keyframes draw-route {
+  to { stroke-dashoffset: 0; }
+}
+.route-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw-route 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) 0.1s forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .unfold { animation: none; }
+  .route-draw { animation: none; stroke-dashoffset: 0; }
+}
+
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
@@ -112,18 +131,6 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 @media (prefers-reduced-motion: reduce) {
   .reveal { opacity: 1; transform: none; transition: none; }
-}
-
-/* Landing page: the thin line under "Scroll" drifts downward */
-@keyframes cue {
-  0% { transform: scaleY(0); transform-origin: top; }
-  50% { transform: scaleY(1); transform-origin: top; }
-  51% { transform: scaleY(1); transform-origin: bottom; }
-  100% { transform: scaleY(0); transform-origin: bottom; }
-}
-.scroll-cue { animation: cue 2.2s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
-@media (prefers-reduced-motion: reduce) {
-  .scroll-cue { animation: none; }
 }
 
 /* Landing page: black-and-white range slider for the reward calculator */

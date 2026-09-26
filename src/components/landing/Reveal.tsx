@@ -27,7 +27,7 @@ export function Reveal({ children, className = "", delay = 0 }: { children: Reac
   }, []);
 
   return (
-    <div ref={ref} className={`reveal ${className}`} style={delay ? { transitionDelay: `${delay}ms` } : undefined}>
+    <div ref={ref} className={`reveal min-w-0 ${className}`} style={delay ? { transitionDelay: `${delay}ms` } : undefined}>
       {children}
     </div>
   );

@@ -1,9 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, type ReactNode } from "react";
-import { TOKEN_SYMBOL } from "@/lib/cluster";
-import { Icon } from "./ui";
+import type { ReactNode } from "react";
 
 export type Tab = "home" | "trips" | "activity" | "devices";
 
@@ -66,70 +64,27 @@ export function TopNav({ address, active, onChange }: NavProps) {
   );
 }
 
-/** Top-bar search. "/" focuses it from anywhere on the page, as in most web apps. */
-function NavSearch({ query, onQuery }: { query: string; onQuery: (query: string) => void }) {
-  const input = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const target = e.target as HTMLElement;
-      if (e.key !== "/" || target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
-      e.preventDefault();
-      input.current?.focus();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  return (
-    <label className="flex h-12 min-w-48 max-w-xl flex-1 items-center gap-3 rounded-full bg-surface px-5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent">
-      <Icon size={20} stroke="var(--color-ink-placeholder)" width={2.5}>
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-3.5-3.5" />
-      </Icon>
-      <input
-        ref={input}
-        type="search"
-        value={query}
-        onChange={(e) => onQuery(e.target.value)}
-        placeholder="Search trips"
-        aria-label="Search trips"
-        className="min-w-0 flex-1 bg-transparent text-[16px] text-ink outline-none placeholder:text-ink-placeholder"
-      />
-      <kbd className="font-sans text-[14px] text-ink-placeholder" aria-hidden>
-        /
-      </kbd>
-    </label>
-  );
-}
-
 /**
- * Desktop: one bar across the top, like a web wallet. Logo and text tabs on the left, trip search in
- * the middle, then balance, the page's primary action and the account on the right. Only from `lg` up.
+ * Desktop: one bar across the top, like a web wallet. Logo and text tabs on the left, then the page's
+ * primary action and the account on the right. Only from `lg` up.
  */
 export function DesktopNav({
   address,
   active,
   onChange,
-  balance,
-  query,
-  onQuery,
   action,
-}: NavProps & { balance?: string; query: string; onQuery: (query: string) => void; action?: ReactNode }) {
+}: NavProps & { action?: ReactNode }) {
   return (
     <header className="sticky top-0 z-30 hidden bg-canvas/90 backdrop-blur lg:block">
       <nav aria-label="Dashboard sections" className="mx-auto flex h-20 max-w-[1400px] items-center gap-8 px-8">
         <div className="flex flex-none items-center gap-7">
+          {/* The same wordmark as the landing page header. */}
           <Link
             href="/"
-            className="press flex size-10 flex-none items-center justify-center rounded-full bg-accent text-canvas"
+            className="flex-none text-[20px] font-medium text-ink transition-colors hover:text-accent"
             aria-label="GoMile home"
           >
-            <Icon size={20} width={2.5}>
-              <circle cx="6" cy="18" r="2.5" />
-              <circle cx="18" cy="6" r="2.5" />
-              <path d="M8 16 16 8" />
-            </Icon>
+            GoMile
           </Link>
           <div role="tablist" className="flex items-center gap-7">
             {TABS.map((tab) => {
@@ -142,7 +97,7 @@ export function DesktopNav({
                   aria-selected={selected}
                   aria-controls={`panel-${tab.id}`}
                   onClick={() => onChange(tab.id)}
-                  className={`whitespace-nowrap text-[18px] font-medium transition-colors ${
+                  className={`whitespace-nowrap text-[15px] font-medium transition-colors ${
                     selected ? "text-accent" : "text-ink-soft hover:text-ink"
                   }`}
                 >
@@ -153,15 +108,7 @@ export function DesktopNav({
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-1 justify-center">
-          <NavSearch query={query} onQuery={onQuery} />
-        </div>
-
-        <div className="flex flex-none items-center gap-2.5">
-          <span className="hidden h-12 items-center gap-2 whitespace-nowrap rounded-full bg-surface px-5 text-[16px] font-medium xl:flex">
-            {balance ?? "—"}
-            <span className="text-ink-soft">{TOKEN_SYMBOL}</span>
-          </span>
+        <div className="ml-auto flex flex-none items-center gap-2.5">
           {action}
           <Link
             href="/"

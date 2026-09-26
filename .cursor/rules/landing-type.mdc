@@ -1,0 +1,14 @@
+---
+description: Landing page type is sentence case in the site sans. Never monospace or all caps.
+globs: src/components/landing/**/*
+alwaysApply: false
+---
+
+# Landing page type
+
+The landing page uses Schibsted Grotesk in sentence case.
+
+- Do not use `font-mono`, `uppercase`, or wide tracked kickers.
+- Do not write labels in all caps. Write "The footage", not "THE FOOTAGE".
+- Keep real names as they are spelled. The token is MILE. Acronyms such as GPS, IMU, and SHA-256 stay.
+- Buttons, nav, and the footer use the same sentence case. "View Demo", not "VIEW DEMO".
