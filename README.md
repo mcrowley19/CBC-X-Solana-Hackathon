@@ -6,6 +6,9 @@ describing the drive, including the route as an encoded polyline when the phone 
 The chain doubles as the database: reward history, duplicate checks and the little route map on each
 trip are all read back from Solana, so no extra storage is needed.
 
+## Pitch deck
+[📑 View the pitch deck (PDF)](GoMile_Pitch_Deck.pdf)
+
 ## Setup
 
 ```bash
