@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from logbook_annotate.models import Detection, Event, MotionEvent
 
-# Mirrors src/lib/rewards.ts. Anything under min confidence earns nothing.
+# Label quality gates (mirrors min confidence in src/lib/rewards.ts). On-chain payout is flat per event.
 MIN_CONFIDENCE = 0.5
 RARE_CONFIDENCE = 0.75
 MIN_TRACK_S = 0.5

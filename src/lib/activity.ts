@@ -76,7 +76,7 @@ function dayLabel(date: Date, now: Date): string {
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Yesterday";
   const sameYear = date.getFullYear() === now.getFullYear();
-  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
 }
 
 /** Groups trips by the local day they were paid, newest day first. Unconfirmed trips go in a "Pending" group on top. */

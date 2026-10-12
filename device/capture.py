@@ -5,12 +5,13 @@ import hashlib
 import os
 import json
 import argparse
+import subprocess
 from datetime import datetime, timezone
 
 try:
     from sense_hat import SenseHat
 
-    sense = SenseHat(imu_only=True)
+    sense = SenseHat()
     print("Sense HAT sensors detected")
     SENSE_HAT_AVAILABLE = True
 except Exception as e:
@@ -47,6 +48,50 @@ def read_sensors():
     }
 
 
+def configure_webcam(
+    device_index: int,
+    *,
+    auto_exposure: bool,
+    exposure_time: int,
+    gain: int,
+    brightness: int,
+) -> None:
+    """Apply V4L2 controls before OpenCV opens the C922 (settings do not stick otherwise)."""
+    dev = f"/dev/video{device_index}"
+    if not os.path.exists(dev):
+        return
+
+    controls = []
+    if auto_exposure:
+        controls.append("auto_exposure=3")
+    else:
+        controls.extend(
+            [
+                "auto_exposure=1",
+                f"exposure_time_absolute={exposure_time}",
+                f"gain={gain}",
+                f"brightness={brightness}",
+            ]
+        )
+
+    for ctrl in controls:
+        subprocess.run(
+            ["v4l2-ctl", "-d", dev, "-c", ctrl],
+            check=False,
+            capture_output=True,
+        )
+
+
+def open_webcam(device_index: int, width: int, height: int) -> cv2.VideoCapture:
+    cap = cv2.VideoCapture(device_index, cv2.CAP_V4L2)
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    for _ in range(10):
+        cap.read()
+    return cap
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Capture video clips with Sense HAT sensor metadata."
@@ -73,12 +118,39 @@ def main():
         help="Directory where clip folders are created",
     )
     parser.add_argument("--device", type=int, default=0)
+    parser.add_argument(
+        "--low-light",
+        action="store_true",
+        help="Manual exposure/gain for dark scenes (default: webcam auto exposure)",
+    )
+    parser.add_argument(
+        "--exposure-time",
+        type=int,
+        default=700,
+        help="Manual exposure time (3-2047) with --low-light",
+    )
+    parser.add_argument(
+        "--gain", type=int, default=140, help="Webcam gain (0-255) with --low-light"
+    )
+    parser.add_argument(
+        "--brightness",
+        type=int,
+        default=175,
+        help="Webcam brightness (0-255) with --low-light",
+    )
     args = parser.parse_args()
 
     resolution = (args.width, args.height)
     os.makedirs(args.outdir, exist_ok=True)
 
-    cap = cv2.VideoCapture(args.device)
+    configure_webcam(
+        args.device,
+        auto_exposure=not args.low_light,
+        exposure_time=args.exposure_time,
+        gain=args.gain,
+        brightness=args.brightness,
+    )
+    cap = open_webcam(args.device, args.width, args.height)
 
     if not cap.isOpened():
         print("Could not open webcam")

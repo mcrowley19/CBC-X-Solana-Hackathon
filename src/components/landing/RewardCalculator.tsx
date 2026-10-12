@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { TOKEN_SYMBOL } from "@/lib/cluster";
-import { RATES, calculateReward, fromBaseUnits, type EventType } from "@/lib/rewards";
+import { EVENT_TYPES, RATES, calculateReward, fromBaseUnits, type EventType } from "@/lib/rewards";
 
 /*
  * A drive you can dial in. It calls the same calculateReward() the payout route calls, so the
@@ -23,7 +23,7 @@ const EVENT_LABELS: Record<EventType, string> = {
   other: "Other",
 };
 
-const PICKABLE = (Object.keys(RATES.events) as EventType[]).filter((t) => t !== "other");
+const PICKABLE = (Object.keys(EVENT_TYPES) as EventType[]).filter((t) => t !== "other");
 
 const INITIAL: Partial<Record<EventType, number>> = { pedestrian: 3, traffic_light: 4, stop_sign: 1, near_miss: 1 };
 
@@ -39,7 +39,7 @@ export function RewardCalculator() {
   const reward = calculateReward({ durationSeconds: minutes * 60, events });
   const total = fromBaseUnits(reward.amount);
   const fromMinutes = minutes >= RATES.minSessionSeconds / 60 ? reward.minutes * RATES.perMinute : 0;
-  const fromEvents = events.reduce((sum, e) => sum + RATES.events[e.type], 0);
+  const fromEvents = reward.eventCount * RATES.perEvent;
 
   const bump = (type: EventType, delta: number) =>
     setCounts((c) => ({ ...c, [type]: Math.max(0, Math.min(99, (c[type] ?? 0) + delta)) }));
@@ -72,15 +72,15 @@ export function RewardCalculator() {
         </div>
 
         <p className="mt-10 text-[15px] text-white/55">Events the annotator found</p>
+        <p className="mt-1 text-[13px] text-white/40">
+          {RATES.perEvent} {TOKEN_SYMBOL} per label, any type. We never pay extra for crashes or near misses.
+        </p>
         <ul className="mt-4 divide-y divide-white/10 border-y border-white/10">
           {PICKABLE.map((type) => {
             const n = counts[type] ?? 0;
             return (
               <li key={type} className="flex items-center gap-4 py-2.5">
                 <span className={`flex-1 text-[15px] ${n ? "text-white" : "text-white/45"}`}>{EVENT_LABELS[type]}</span>
-                <span className="w-16 text-right text-[13px] text-white/45 tabular-nums">
-                  {RATES.events[type]} {TOKEN_SYMBOL}
-                </span>
                 <div className="flex items-center">
                   <button
                     type="button"
@@ -121,7 +121,9 @@ export function RewardCalculator() {
               <dd className="tabular-nums">{formatMile(fromMinutes)}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-white/50">{reward.eventCount} events</dt>
+              <dt className="text-white/50">
+                {reward.eventCount} labels × {RATES.perEvent}
+              </dt>
               <dd className="tabular-nums">{formatMile(fromEvents)}</dd>
             </div>
             {reward.capped && (

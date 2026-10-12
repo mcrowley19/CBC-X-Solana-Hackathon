@@ -57,8 +57,8 @@ Driver account  ◀── dashboard reads balance + memo history from chain ◀�
 | `POST /api/sessions` | Pi / annotation worker (`Authorization: Bearer $DEVICE_API_KEY`) | Calculates the reward and pays it. Idempotent on `sessionId`. |
 | `GET /api/drivers/:wallet` | Dashboard | Returns balance, totals and per-drive history. |
 
-The reward rules are in `src/lib/rewards.ts`: a per-minute base rate, per-event bonuses, a confidence
-threshold and a per-session cap.
+The reward rules are in `src/lib/rewards.ts`: per-minute base, flat per-event bonus (same for every
+label type; no extra pay for collisions or near misses), confidence threshold, and per-session cap.
 
 ## Reporting a drive from the Pi (Python)
 

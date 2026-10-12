@@ -90,7 +90,7 @@ function useScrolledPast(ref: React.RefObject<HTMLElement | null>) {
 const AUDIENCES = [
   {
     title: "If you drive",
-    body: `Mount GoMile on your dashboard and drive the way you always do. It records the road, picks out the moments worth keeping, and pays you in ${TOKEN_SYMBOL}: ${RATES.perMinute} for every minute behind the wheel, plus a bonus for each event it finds. Nothing to press, nothing to upload.`,
+    body: `Mount GoMile on your dashboard and drive the way you always do. It records the road, labels what the models see, and pays you in ${TOKEN_SYMBOL}: ${RATES.perMinute} per minute plus ${RATES.perEvent} per verified label (same rate for every type). Nothing to press, nothing to upload.`,
     file: "/landing/audience-driver.png",
     alt: "From the passenger seat at dusk: a small black camera on the dashboard, the driver's hands on the wheel, a city road ahead.",
   },

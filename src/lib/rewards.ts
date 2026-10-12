@@ -3,8 +3,8 @@
  *
  * A driver earns:
  *   - a base rate for every minute of footage the device uploaded, plus
- *   - a bonus for each event the annotation pipeline found (rarer, more valuable
- *     events such as near misses are worth more as training data).
+ *   - a flat bonus for each event the annotation pipeline verified (same rate for
+ *     every type — we never pay extra for collisions or near misses).
  * Each session is capped so one bad or looping upload can't drain the treasury.
  *
  * All arithmetic is done in integer base units (bigint) so amounts are exact;
@@ -14,28 +14,32 @@
 export const TOKEN_DECIMALS = 6;
 const UNITS_PER_TOKEN = 10n ** BigInt(TOKEN_DECIMALS);
 
+/** Known labels from the annotation pipeline (metadata only; payout is flat per event). */
+export const EVENT_TYPES = {
+  near_miss: "near_miss",
+  collision: "collision",
+  hazard: "hazard",
+  pedestrian: "pedestrian",
+  cyclist: "cyclist",
+  emergency_vehicle: "emergency_vehicle",
+  red_light: "red_light",
+  stop_sign: "stop_sign",
+  traffic_light: "traffic_light",
+  lane_change: "lane_change",
+  other: "other",
+} as const;
+
+export type EventType = keyof typeof EVENT_TYPES;
+
 export const RATES = {
   perMinute: 1,
+  /** Same for every verified label — no premium for risky footage. */
+  perEvent: 1,
   maxPerSession: 500,
   minSessionSeconds: 60,
   /** Events below this confidence don't earn a bonus. */
   minConfidence: 0.5,
-  events: {
-    near_miss: 10,
-    collision: 10,
-    hazard: 5,
-    pedestrian: 3,
-    cyclist: 3,
-    emergency_vehicle: 3,
-    red_light: 2,
-    stop_sign: 1,
-    traffic_light: 1,
-    lane_change: 0.5,
-    other: 0.5,
-  },
 } as const;
-
-export type EventType = keyof typeof RATES.events;
 
 export type AnnotatedEvent = {
   type: string;
@@ -65,7 +69,7 @@ export function fromBaseUnits(units: bigint): number {
 }
 
 function isEventType(type: string): type is EventType {
-  return Object.hasOwn(RATES.events, type);
+  return Object.hasOwn(EVENT_TYPES, type);
 }
 
 export function calculateReward(input: { durationSeconds: number; events?: AnnotatedEvent[] }): RewardBreakdown {
@@ -75,12 +79,13 @@ export function calculateReward(input: { durationSeconds: number; events?: Annot
 
   const eventCounts: RewardBreakdown["eventCounts"] = {};
   let eventCount = 0;
+  const perEvent = toBaseUnits(RATES.perEvent);
   for (const event of input.events ?? []) {
     if (event.confidence !== undefined && event.confidence < RATES.minConfidence) continue;
     const type: EventType = isEventType(event.type) ? event.type : "other";
     eventCounts[type] = (eventCounts[type] ?? 0) + 1;
     eventCount += 1;
-    amount += toBaseUnits(RATES.events[type]);
+    amount += perEvent;
   }
 
   const cap = toBaseUnits(RATES.maxPerSession);

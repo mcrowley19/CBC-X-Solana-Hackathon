@@ -2,14 +2,20 @@ import { describe, expect, it } from "vitest";
 import { calculateReward, fromBaseUnits, serializeReward, toBaseUnits } from "./rewards";
 
 describe("calculateReward", () => {
-  it("pays per minute plus per-event bonuses", () => {
+  it("pays per minute plus a flat bonus per verified event", () => {
     const reward = calculateReward({
       durationSeconds: 1800,
       events: [{ type: "pedestrian" }, { type: "near_miss", confidence: 0.8 }],
     });
     expect(reward.minutes).toBe(30);
     expect(reward.eventCount).toBe(2);
-    expect(reward.amount).toBe(toBaseUnits(43));
+    expect(reward.amount).toBe(toBaseUnits(32));
+  });
+
+  it("pays the same for a near miss as for any other label", () => {
+    const pedestrian = calculateReward({ durationSeconds: 0, events: [{ type: "pedestrian" }] });
+    const nearMiss = calculateReward({ durationSeconds: 0, events: [{ type: "near_miss", confidence: 0.9 }] });
+    expect(pedestrian.amount).toBe(nearMiss.amount);
   });
 
   it("ignores low-confidence events", () => {
@@ -21,7 +27,7 @@ describe("calculateReward", () => {
   it("counts unknown event types as `other`", () => {
     const reward = calculateReward({ durationSeconds: 0, events: [{ type: "unicorn" }] });
     expect(reward.eventCounts).toEqual({ other: 1 });
-    expect(reward.amount).toBe(toBaseUnits(0.5));
+    expect(reward.amount).toBe(toBaseUnits(1));
   });
 
   it("does not treat inherited object keys as event types", () => {
@@ -39,10 +45,9 @@ describe("calculateReward", () => {
     expect(reward.amount).toBe(toBaseUnits(500));
   });
 
-  it("adds fractional bonuses exactly", () => {
+  it("adds per-event bonuses exactly in base units", () => {
     const events = Array.from({ length: 3 }, () => ({ type: "lane_change" }));
-    // 0.5 * 3 in floating point is fine, but many small fractions drift; bigint never does.
-    expect(calculateReward({ durationSeconds: 0, events }).amount).toBe(1_500_000n);
+    expect(calculateReward({ durationSeconds: 0, events }).amount).toBe(toBaseUnits(3));
   });
 });
 

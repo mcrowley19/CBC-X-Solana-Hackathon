@@ -18,7 +18,8 @@ ACCENT = (200, 67, 30, 255)
 CARD_HOLD_S = 2.5
 CARD_FADE_S = 0.25
 
-RARE = {"near_miss", "collision", "lane_change", "red_light", "hazard", "emergency_vehicle"}
+# Review-video highlights only — payout on-chain is flat per label (see src/lib/rewards.ts).
+HIGHLIGHT = {"near_miss", "collision", "lane_change", "red_light", "hazard", "emergency_vehicle"}
 NAMES = {
     "near_miss": "Near miss",
     "collision": "Collision",
@@ -149,7 +150,7 @@ def render_review(
 
 
 def _cards(events: list[Event], motion: list[MotionEvent]) -> list[tuple[float, str, str]]:
-    cards = [(event.t, event.type, f"{event.confidence:.2f}") for event in events if event.type in RARE]
+    cards = [(event.t, event.type, f"{event.confidence:.2f}") for event in events if event.type in HIGHLIGHT]
     cards.extend((item.t, item.kind, f"{item.g:.2f} g") for item in motion)
     cards.sort(key=lambda item: item[0])
     return cards
@@ -211,8 +212,8 @@ def _draw_card(
     active = [(start, kind, detail) for start, kind, detail in cards if 0 <= t - start <= CARD_HOLD_S + CARD_FADE_S]
     if not active:
         return
-    rare = [card for card in active if card[1] in RARE]
-    start, kind, detail = (rare or active)[-1]
+    highlighted = [card for card in active if card[1] in HIGHLIGHT]
+    start, kind, detail = (highlighted or active)[-1]
     age = t - start
     if age > CARD_HOLD_S:
         alpha = max(0.0, 1 - (age - CARD_HOLD_S) / CARD_FADE_S)
